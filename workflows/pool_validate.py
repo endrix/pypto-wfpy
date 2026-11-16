@@ -43,8 +43,9 @@ DEFAULT_KERNELS = [
     "examples/01_fused_elementwise.py",
     "examples/02_row_softmax.py",
     "examples/03_fused_linear.py",
+    "examples/04_layer_norm.py",
 ]
-POOL = int(__import__("os").environ.get("PYPTO_POOL", "3"))
+POOL = int(__import__("os").environ.get("PYPTO_POOL", "4"))
 
 
 def make_dispatch(pool: int) -> type:

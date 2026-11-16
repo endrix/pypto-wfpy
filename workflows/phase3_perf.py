@@ -34,6 +34,7 @@ DEFAULT_KERNELS = [
     "examples/01_fused_elementwise.py",
     "examples/02_row_softmax.py",
     "examples/03_fused_linear.py",
+    "examples/04_layer_norm.py",
 ]
 
 # "Average MTE_IN Usage............................:   4387.00   19.86%"
