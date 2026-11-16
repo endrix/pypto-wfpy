@@ -2,10 +2,17 @@
 # Entry point for the pypto-wfpy workflows.
 #
 #   ./run.sh validate [kernel.py ...]   # phase 1: run + gate on the self-check
+#   ./run.sh pool     [kernel.py ...]   # phase 1, all kernels concurrently
 #   ./run.sh ir       [kernel.py ...]   # phase 2: per-pass IR diff report
+#   ./run.sh perf     [kernel.py ...]   # phase 3: bottleneck from sim counters
+#   ./run.sh repair   <kernel.py>       # phase 4: bounded agent repair loop
 #   ./run.sh plan     <workflow.py>     # dump the wfpy graph as JSON
 #
 # PYPTO_VENV overrides the interpreter; CANN_ENV overrides the CANN setup script.
+# PYPTO_POOL sets the concurrent slot count (default 3).
+# PYPTO_REPAIR_TRANSPORT=acp uses the real claude connector (spends tokens);
+# PYPTO_REPAIR_BUDGET caps the repair attempts.
+# WF_SKILLS_ROOT points wfpy at the cannbot pypto-* skills.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -32,19 +39,35 @@ else
     echo "warning: $CANN_ENV not found; pypto may not be importable" >&2
 fi
 
+# The cannbot pypto-* skills are used in place; a symlink into them would be
+# rejected by wfpy's skill-root containment check.
+CANNBOT_OPS="${CANNBOT_OPS:-/home/endrix/git/pypto/cannbot-skills/ops}"
+if [ -z "${WF_SKILLS_ROOT:-}" ] && [ -d "$CANNBOT_OPS" ]; then
+    export WF_SKILLS_ROOT="$CANNBOT_OPS"
+fi
+
 cmd="${1:-validate}"
 shift || true
 
 case "$cmd" in
     validate) exec "$PY" "$ROOT/workflows/phase1_validate.py" "$@" ;;
+    pool)     exec "$PY" "$ROOT/workflows/pool_validate.py" "$@" ;;
     ir)       exec "$PY" "$ROOT/workflows/phase2_ir.py" "$@" ;;
+    perf)     exec "$PY" "$ROOT/workflows/phase3_perf.py" "$@" ;;
+    repair)   exec "$PY" "$ROOT/workflows/phase4_repair.py" "$@" ;;
     plan)
         wf="${1:?usage: ./run.sh plan <workflow.py>}"
-        name="$([ "$(basename "$wf")" = "phase2_ir.py" ] && echo inspect_ir || echo validate_kernel)"
+        case "$(basename "$wf")" in
+            phase2_ir.py)      name=inspect_ir ;;
+            phase3_perf.py)    name=analyze_perf ;;
+            phase4_repair.py)  name=repair_kernel ;;
+            pool_validate.py)  name=validate_pool ;;
+            *)                 name=validate_kernel ;;
+        esac
         exec "$PYPTO_VENV/bin/wfpy" plan "$wf" --workflow "$name" --format graph
         ;;
     *)
-        echo "usage: ./run.sh {validate|ir|plan} [args...]" >&2
+        echo "usage: ./run.sh {validate|pool|ir|perf|repair|plan} [args...]" >&2
         exit 2
         ;;
 esac
