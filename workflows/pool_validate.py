@@ -36,7 +36,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from _nodes import LOCK, RunResult, default_run_mode, execute_job, make_job  # noqa: E402
+from _nodes import LOCK, WF_OUT, RunResult, default_run_mode, execute_job, make_job  # noqa: E402
 from wfpy import Port, action, connect, run, task, workflow  # noqa: E402
 
 DEFAULT_KERNELS = [
@@ -188,7 +188,7 @@ def main() -> int:
     if len(kernels) > POOL:
         print(f"error: {len(kernels)} kernels but PYPTO_POOL={POOL}", file=sys.stderr)
         return 2
-    result = run(validate_pool, inputs={"Kernels": kernels}, max_workers=POOL)
+    result = run(validate_pool, inputs={"Kernels": kernels}, max_workers=POOL, out_dir=str(WF_OUT))
     lines = result["Out"] or []
     # The join emits a snapshot per arrival; the last one is the most complete.
     print(lines[-1] if lines else "(no output)")

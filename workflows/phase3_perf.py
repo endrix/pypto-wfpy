@@ -27,7 +27,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from _nodes import Prepare, RunResult, RunSim, default_run_mode  # noqa: E402
+from _nodes import WF_OUT, Prepare, RunResult, RunSim, default_run_mode  # noqa: E402
 from wfpy import Port, action, connect, run, task, workflow  # noqa: E402
 
 DEFAULT_KERNELS = [
@@ -216,7 +216,7 @@ def main() -> int:
     kernels = sys.argv[1:] or DEFAULT_KERNELS
     failures = 0
     for kernel in kernels:
-        result = run(analyze_perf, inputs={"Kernel": kernel})
+        result = run(analyze_perf, inputs={"Kernel": kernel}, out_dir=str(WF_OUT))
         for line in result["Report"] or ["(no output)"]:
             print(line)
             if line.startswith(("SKIP", "(no")):

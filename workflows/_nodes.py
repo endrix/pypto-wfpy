@@ -23,6 +23,11 @@ from wfpy import Port, action, guard, task
 REPO_ROOT = Path(__file__).resolve().parent.parent
 IR_RUNNER = REPO_ROOT / "tools" / "run_with_ir.py"
 
+# wfpy defaults out_dir to ./wf-out relative to the *invocation* cwd, which
+# scatters run logs wherever the command happened to be typed. Pin it to the
+# repo so every run's journal and queue trace lands in one place.
+WF_OUT = Path(os.environ.get("PYPTO_WF_OUT", REPO_ROOT / "wf-out"))
+
 # Join actors accumulate into state while several worker slots fire at once.
 LOCK = threading.Lock()
 

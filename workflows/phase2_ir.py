@@ -41,7 +41,7 @@ import time
 # wfpy loads this file by path; make sibling modules importable either way.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from _nodes import default_run_mode  # noqa: E402
+from _nodes import WF_OUT, default_run_mode  # noqa: E402
 from wfpy import Port, action, connect, run, task, workflow  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -357,7 +357,7 @@ def main() -> int:
     kernels = sys.argv[1:] or [DEFAULT_KERNEL]
     failures = 0
     for kernel in kernels:
-        result = run(inspect_ir, inputs={"Kernel": kernel})
+        result = run(inspect_ir, inputs={"Kernel": kernel}, out_dir=str(WF_OUT))
         for line in result["Report"] or ["(no output)"]:
             print(line)
             if line.startswith(("FAIL", "(no")):

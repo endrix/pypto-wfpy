@@ -36,7 +36,7 @@ import sys
 # wfpy loads this file by path; make sibling modules importable either way.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from _nodes import Gate, Prepare, RunResult, RunSim, default_run_mode  # noqa: E402
+from _nodes import WF_OUT, Gate, Prepare, RunResult, RunSim, default_run_mode  # noqa: E402
 from wfpy import Port, action, connect, run, task, workflow  # noqa: E402
 
 DEFAULT_KERNELS = [
@@ -85,7 +85,7 @@ def main() -> int:
     kernels = sys.argv[1:] or DEFAULT_KERNELS
     failures = 0
     for kernel in kernels:
-        result = run(validate_kernel, inputs={"Kernel": kernel})
+        result = run(validate_kernel, inputs={"Kernel": kernel}, out_dir=str(WF_OUT))
         for line in result["Out"] or ["(no output)"]:
             print(line)
             if line.startswith(("FAIL", "(no")):

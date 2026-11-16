@@ -45,7 +45,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from _nodes import Gate, Prepare, RunResult, RunSim, default_run_mode  # noqa: E402
+from _nodes import WF_OUT, Gate, Prepare, RunResult, RunSim, default_run_mode  # noqa: E402
 from wfpy import Port, action, agent, connect, guard, run, task, workflow  # noqa: E402
 
 BUDGET = int(os.environ.get("PYPTO_REPAIR_BUDGET", "2"))
@@ -262,6 +262,7 @@ def main() -> int:
         repair_kernel,
         inputs={"Kernel": sys.argv[1]},
         acp_connector=CONNECTOR if IS_ACP else None,
+        out_dir=str(WF_OUT),
     )
     lines = result["Out"] or ["(no output)"]
     for line in lines:

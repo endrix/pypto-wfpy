@@ -7,9 +7,12 @@
 #   ./run.sh perf     [kernel.py ...]   # phase 3: bottleneck from sim counters
 #   ./run.sh repair   <kernel.py>       # phase 4: bounded agent repair loop
 #   ./run.sh plan     <workflow.py>     # dump the wfpy graph as JSON
+#   ./run.sh wfpy     run <args...>    # raw wfpy passthrough, wf-out pinned
 #
 # PYPTO_VENV overrides the interpreter; CANN_ENV overrides the CANN setup script.
-# PYPTO_POOL sets the concurrent slot count (default 3).
+# PYPTO_POOL sets the concurrent slot count (default 4).
+# PYPTO_RUN_MODE=npu|sim forces the run mode; PYPTO_DEVICES spreads pool slots.
+# PYPTO_WF_OUT overrides the run directory (default <repo>/wf-out).
 # PYPTO_REPAIR_TRANSPORT=acp uses the real claude connector (spends tokens);
 # PYPTO_REPAIR_BUDGET caps the repair attempts.
 # WF_SKILLS_ROOT points wfpy at the cannbot pypto-* skills.
@@ -66,8 +69,13 @@ case "$cmd" in
         esac
         exec "$PYPTO_VENV/bin/wfpy" plan "$wf" --workflow "$name" --format graph
         ;;
+    wfpy)
+        # Raw `wfpy run` passthrough, with the run dir pinned the same way the
+        # workflows' own main() functions pin it.
+        exec "$PYPTO_VENV/bin/wfpy" run --out-dir "$ROOT/wf-out" "$@"
+        ;;
     *)
-        echo "usage: ./run.sh {validate|pool|ir|perf|repair|plan} [args...]" >&2
+        echo "usage: ./run.sh {validate|pool|ir|perf|repair|plan|wfpy} [args...]" >&2
         exit 2
         ;;
 esac

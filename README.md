@@ -16,11 +16,20 @@ without touching the others.
 | **Phase 4** | `phase4_repair.py` | `Feed → Prepare → RunSim → Gate → Budget → Agent → ApplyPatch ↺` | `repair` |
 
 ```
-examples/     three verified PyPTO Tensor-mode kernels (see examples/README.md)
+examples/     four verified PyPTO Tensor-mode kernels (see examples/README.md)
+fixtures/     deliberately broken kernels, for testing the repair loop
 workflows/    the wfpy graphs; _nodes.py holds the shared tokens and actors
 tools/        run_with_ir.py -- enables per-pass IR dumping without editing a kernel
 runs/         per-kernel work dirs: reports, diffs, simulator output
+wf-out/       wfpy run dirs: journals, queue traces, agent transcripts
 ```
+
+Both `runs/` and `wf-out/` are always inside the repo, whatever directory you
+invoke from. wfpy defaults its `out_dir` to `./wf-out` relative to the
+*invocation* cwd, which would otherwise scatter run logs; every workflow pins it
+to `<repo>/wf-out` instead, overridable with `PYPTO_WF_OUT`. `./run.sh wfpy run
+...` passes `--out-dir` for the same reason, since the bare `wfpy` CLI bypasses
+the workflows' own `main()`.
 
 ## Setup
 
