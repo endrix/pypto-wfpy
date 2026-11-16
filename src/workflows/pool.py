@@ -1,0 +1,76 @@
+#!/usr/bin/env python3
+# coding: utf-8
+"""Validate several PyPTO kernels concurrently, in one graph.
+
+    "Kernels" --> Dispatch --+--> Worker0 --+--> Join --> PoolSummary --> "Out"
+                             +--> Worker1 --+
+                             +--> Worker2 --+
+                             +--> Worker3 --+
+
+One actor never runs concurrently with itself, so real parallelism needs one
+worker chain per slot. Two wfpy constraints shape the fan-out and fan-in, and
+both are explained in src/tasks/dispatch.py and src/tasks/join.py.
+
+Run:
+    ./run.sh pool [kernel.py ...]        # PYPTO_POOL sets the slot count
+"""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from src.runner import WF_OUT, default_run_mode  # noqa: E402
+from src.tasks.dispatch import make_dispatch  # noqa: E402
+from src.tasks.join import make_join  # noqa: E402
+from src.tasks.pool_summary import PoolSummary  # noqa: E402
+from src.tasks.worker import make_worker  # noqa: E402
+from wfpy import connect, run, workflow  # noqa: E402
+
+DEFAULT_KERNELS = [
+    "examples/01_fused_elementwise.py",
+    "examples/02_row_softmax.py",
+    "examples/03_fused_linear.py",
+    "examples/04_layer_norm.py",
+]
+POOL = int(os.environ.get("PYPTO_POOL", "4"))
+
+Dispatch = make_dispatch(POOL)
+Join = make_join(POOL)
+Workers = [make_worker(i) for i in range(POOL)]
+
+
+@workflow(inputs={"Kernels": list}, outputs={"Out": str})
+def validate_pool() -> None:
+    """Fan the kernel list across POOL worker chains, then join."""
+    dispatch = Dispatch()
+    join = Join()
+    summary = PoolSummary()
+    workers = [Workers[i](run_mode=default_run_mode()) for i in range(POOL)]
+
+    connect("Kernels", dispatch.Kernels)
+    for i, worker in enumerate(workers):
+        connect(getattr(dispatch, f"S{i}"), worker.Kernel)
+        connect(worker.Result, getattr(join, f"R{i}"))
+    connect(join.Results, summary.Results)
+    connect(summary.Out, "Out")
+
+
+def main() -> int:
+    kernels = sys.argv[1:] or DEFAULT_KERNELS
+    if len(kernels) > POOL:
+        print(f"error: {len(kernels)} kernels but PYPTO_POOL={POOL}", file=sys.stderr)
+        return 2
+    result = run(validate_pool, inputs={"Kernels": kernels}, max_workers=POOL,
+                 out_dir=str(WF_OUT))
+    lines = result["Out"] or []
+    # The join emits a snapshot per arrival; the last one is the most complete.
+    print(lines[-1] if lines else "(no output)")
+    return 1 if not lines or "FAIL" in lines[-1] else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

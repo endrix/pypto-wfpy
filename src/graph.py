@@ -132,3 +132,20 @@ def summarize(run_dir: str | Path) -> GraphSummary:
         tile_shapes=frozenset(tiles),
         dump_root=dump_root,
     )
+
+
+# "Before_014_InsertOpForViewAssemble_k_PATH0_hiddenfunc_5.tifwkgr"
+DUMP_RE = re.compile(r"^(Before|After)_(\d+)_(.+?)_(.*)\.tifwkgr$")
+
+
+def level_of(path: Path) -> str:
+    """Read the IR level out of a dump's `Function ...` header line."""
+    try:
+        with path.open(encoding="utf-8", errors="replace") as handle:
+            for line in handle:
+                if line.startswith("Function "):
+                    found = re.search("|".join(ALL_LEVELS), line)
+                    return found.group(0) if found else "?"
+    except OSError:
+        pass
+    return "?"

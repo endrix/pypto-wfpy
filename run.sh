@@ -53,19 +53,19 @@ cmd="${1:-validate}"
 shift || true
 
 case "$cmd" in
-    validate) exec "$PY" "$ROOT/workflows/phase1_validate.py" "$@" ;;
-    pool)     exec "$PY" "$ROOT/workflows/pool_validate.py" "$@" ;;
-    ir)       exec "$PY" "$ROOT/workflows/phase2_ir.py" "$@" ;;
-    perf)     exec "$PY" "$ROOT/workflows/phase3_perf.py" "$@" ;;
-    repair)   exec "$PY" "$ROOT/workflows/phase4_repair.py" "$@" ;;
+    validate) exec "$PY" "$ROOT/src/workflows/validate.py" "$@" ;;
+    pool)     exec "$PY" "$ROOT/src/workflows/pool.py" "$@" ;;
+    ir)       exec "$PY" "$ROOT/src/workflows/ir.py" "$@" ;;
+    perf)     exec "$PY" "$ROOT/src/workflows/perf.py" "$@" ;;
+    repair)   exec "$PY" "$ROOT/src/workflows/repair.py" "$@" ;;
     plan)
         wf="${1:?usage: ./run.sh plan <workflow.py>}"
         case "$(basename "$wf")" in
-            phase2_ir.py)      name=inspect_ir ;;
-            phase3_perf.py)    name=analyze_perf ;;
-            phase4_repair.py)  name=repair_kernel ;;
-            pool_validate.py)  name=validate_pool ;;
-            *)                 name=validate_kernel ;;
+            ir.py)      name=inspect_ir ;;
+            perf.py)    name=analyze_perf ;;
+            repair.py)  name=repair_kernel ;;
+            pool.py)    name=validate_pool ;;
+            *)          name=validate_kernel ;;
         esac
         exec "$PYPTO_VENV/bin/wfpy" plan "$wf" --workflow "$name" --format graph
         ;;

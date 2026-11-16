@@ -9,19 +9,40 @@ without touching the others.
 
 | | Workflow | Graph | `run.sh` |
 |---|---|---|---|
-| **Phase 1** | `phase1_validate.py` | `Prepare → RunSim → Gate → Report` | `validate` |
-| **Phase 1 (pool)** | `pool_validate.py` | `Dispatch → N×(Prepare→RunSim) → Join → Summary` | `pool` |
-| **Phase 2** | `phase2_ir.py` | `PrepareIR → RunWithIR → CollectIR → DiffIR` | `ir` |
-| **Phase 3** | `phase3_perf.py` | `Prepare → RunSim → CollectPerf → Analyze` | `perf` |
-| **Phase 4** | `phase4_repair.py` | `Feed → Prepare → RunSim → Gate → Budget → Agent → ApplyPatch ↺` | `repair` |
+| **Phase 1** | `workflows/validate.py` | `Prepare → RunSim → Gate → VerdictReport` | `validate` |
+| **Phase 1 (pool)** | `workflows/pool.py` | `Dispatch → N×Worker → Join → PoolSummary` | `pool` |
+| **Phase 2** | `workflows/ir.py` | `PrepareIR → RunWithIR → CollectIR → DiffIR` | `ir` |
+| **Phase 3** | `workflows/perf.py` | `Prepare → RunSim → CollectPerf → AnalyzePerf` | `perf` |
+| **Phase 4** | `workflows/repair.py` | `RunKernel → Decide → RepairAgent → ApplyPatch ↺ → RepairReport` | `repair` |
 
 ```
-examples/     four verified PyPTO Tensor-mode kernels (see examples/README.md)
-fixtures/     deliberately broken kernels, for testing the repair loop
-workflows/    the wfpy graphs; _nodes.py holds the shared tokens and actors
-tools/        run_with_ir.py -- enables per-pass IR dumping without editing a kernel
-runs/         per-kernel work dirs: reports, diffs, simulator output
-wf-out/       wfpy run dirs: journals, queue traces, agent transcripts
+examples/           four verified PyPTO Tensor-mode kernels (see examples/README.md)
+fixtures/           deliberately broken kernels, for testing the repair loop
+src/tasks/          one @task per file
+src/agents/         one @agent per file
+src/tools/          one @tool per file (empty for now)
+src/workflows/      one @workflow per file -- wiring and CLI entry, no actors
+src/records.py      token dataclasses
+src/runner.py       paths, run-mode detection, subprocess execution
+src/graph.py        IR dump parsing and the structural summary
+src/perf.py         simulator report parsing
+src/repair_config.py  repair-loop settings and the agent prompt
+tools/              run_with_ir.py -- per-pass IR dumping without editing a kernel
+runs/               per-kernel work dirs: reports, diffs, simulator output
+wf-out/             wfpy run dirs: journals, queue traces, agent transcripts
+```
+
+**One actor per file.** Every `@task`, `@agent` and `@tool` lives in its own
+module, and a workflow file contains only its `@workflow` wiring plus a CLI
+entry. Shared *data types* and plain helpers may share a module -- the rule is
+about actors. This mirrors `wfpy-skillyard`'s layout, keeps a node diffable on
+its own, and makes a graph's shape readable from the directory listing.
+
+Because wfpy loads a workflow by path, each workflow file puts the project root
+on `sys.path` before its `src.*` imports:
+
+```python
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 ```
 
 Both `runs/` and `wf-out/` are always inside the repo, whatever directory you
