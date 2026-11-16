@@ -1,37 +1,33 @@
 #!/usr/bin/env python3
 # coding: utf-8
-"""Repair the row-softmax kernel, fed from a file source and ending in a viewer.
+"""Repair the row-softmax kernel: a file source, the repair flow, a viewer.
 
-Same repair loop as repair.py, but the kernel under repair arrives from a
-``@source`` node holding the Python file, and the verdict is written to disk and
-handed to a ``@viewer`` instead of only being printed.
+Three nodes. The loop itself is a sub-workflow, so this top level says only what
+the run *is* -- where the code comes from, what happens to it, and where the
+answer goes:
 
-    KernelSource --> RunKernel --> Decide --(Done)------> WriteRepairReport --+--> "Out"
-                       ^  ^           |--(Exhausted)-----^                    |
-                       |  |           |                                       v
-                       |  |        (Repair)                        RepairReportViewer
-                       |  |           v
-                       |  +-- ApplyPatch <-- RepairAgent
-
-Why the extra two nodes:
+    KernelSource --> repair_flow() --> RepairReportViewer
+                           |
+                           +--> "Out"
 
 - ``KernelSource`` is a ``@source``: no inputs, so nothing can trigger it and
   nothing can stop it, and wfpy writes the emit-once latch. Its ``path`` is a
-  constructor parameter, so one class serves many files. At runtime a File token
-  is just the resolved path string, which is why it can drive RunKernel's
-  ``Port[str]`` input directly.
-- ``WriteRepairReport`` exists because a viewer opens a file on DISK. A node that
-  only returned a string would leave the viewer with nothing to show, so the
-  report is written first and its File token feeds the viewer.
+  constructor parameter, so one class serves many files. It emits the configured
+  ``File`` dataclass rather than a path string -- deliberate, so a source file's
+  sibling imports keep resolving -- which downstream nodes coerce with ``str()``.
+- ``repair_flow`` is instantiated, not imported as actors: a sub-workflow exposes
+  its boundary ports as attributes, so it wires up like any other node.
+- ``RepairReportViewer`` opens a file on DISK, which is why the flow emits a
+  ``Report`` file alongside the text verdict.
 
 The default input is a deliberately broken softmax: ``pypto.softmax(x, dim=0)``
 reduces columns instead of rows. Point it at ``examples/02_row_softmax.py`` and
-the loop should accept on the first run without calling the agent at all.
+the loop reports ALREADY OK on the first run without calling the agent.
 
 Run:
-    ./run.sh repair-softmax                       # mock transport
-    PYPTO_REPAIR_TRANSPORT=acp ./run.sh repair-softmax    # real; spends tokens
-    ./run.sh repair-softmax examples/02_row_softmax.py    # the working kernel
+    ./run.sh repair-softmax                                 # mock transport
+    PYPTO_REPAIR_TRANSPORT=acp ./run.sh repair-softmax      # real; spends tokens
+    ./run.sh repair-softmax examples/02_row_softmax.py      # the working kernel
 """
 
 from __future__ import annotations
@@ -41,15 +37,11 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.agents.repair_agent import RepairAgent  # noqa: E402
 from src.lib.repair_config import BUDGET, CONNECTOR, IS_ACP, REPAIR_SKILL, TRANSPORT  # noqa: E402
 from src.lib.runner import REPO_ROOT, WF_OUT, default_run_mode  # noqa: E402
 from src.sources.kernel_source import KernelSource  # noqa: E402
-from src.tasks.apply_patch import ApplyPatch  # noqa: E402
-from src.tasks.decide import Decide  # noqa: E402
-from src.tasks.run_kernel import RunKernel  # noqa: E402
-from src.tasks.write_repair_report import WriteRepairReport  # noqa: E402
 from src.viewers.repair_report_viewer import RepairReportViewer  # noqa: E402
+from src.workflows.repair_flow import repair_flow  # noqa: E402
 from wfpy import File, connect, run, workflow  # noqa: E402
 
 DEFAULT_KERNEL = "fixtures/02_row_softmax_broken.py"
@@ -62,30 +54,14 @@ KERNEL_PATH = _requested if Path(_requested).is_absolute() else str(REPO_ROOT / 
 
 @workflow(inputs={}, outputs={"Out": str})
 def repair_softmax() -> None:
-    """Seven actors: the repair loop, plus a file source and a report viewer."""
+    """Three nodes: where the code comes from, what happens to it, where it goes."""
     kernel = KernelSource(path=File(KERNEL_PATH))
-    runner = RunKernel(run_mode=default_run_mode())
-    decide = Decide(budget=BUDGET)
-    repair = RepairAgent()
-    patch = ApplyPatch()
-    writer = WriteRepairReport()
+    flow = repair_flow()
     view = RepairReportViewer()
 
-    # The source replaces the workflow's boundary input entirely.
-    connect(kernel.Out, runner.Initial)
-    connect(runner.Result, decide.Result)
-
-    connect(decide.Done, writer.Done)
-    connect(decide.Exhausted, writer.Exhausted)
-
-    # The loop: repair -> patch -> back into the runner's second input port.
-    connect(decide.Repair, repair.Failure)
-    connect(repair.Patched, patch.Patched)
-    connect(patch.Kernel, runner.Retry)
-
-    # One output broadcasts: the file goes to the viewer, the text to stdout.
-    connect(writer.Report, view.Report)
-    connect(writer.Out, "Out")
+    connect(kernel.Out, flow.Kernel)
+    connect(flow.Report, view.Report)
+    connect(flow.Verdict, "Out")
 
 
 def main() -> int:

@@ -1,19 +1,15 @@
 #!/usr/bin/env python3
 # coding: utf-8
-"""A bounded repair loop around a failing PyPTO kernel.
+"""Repair a failing PyPTO kernel named on the command line.
 
-    "Kernel" --> RunKernel --> Decide --(Done)-------> RepairReport --> "Out"
-                   ^  ^           |--(Exhausted)-------^
-                   |  |           |
-                   |  |        (Repair)
-                   |  |           v
-                   |  +-- ApplyPatch <-- RepairAgent
+The plain entry point: a kernel path in, a verdict on stdout. The loop itself is
+the ``repair_flow`` sub-workflow, shared with repair_softmax.py so it is not
+defined twice and cannot drift between the two.
 
-A loop in wfpy is an ordinary feedback edge with no backpressure, so it must
-terminate by itself: Decide is the only exit. The gate checks more than stdout --
-a kernel that compiles nothing still exits 0 -- so each attempt dumps IR and the
-gate requires a real kernel plus all four IR levels. Structural change is
-reported, not failed: fixing a tiling bug must change the tiling.
+    "Kernel" --> repair_flow() --> "Out"
+
+For the version that reads its input from a file source and ends in a report
+viewer, see repair_softmax.py.
 
 Run:
     ./run.sh repair <kernel.py>
@@ -27,37 +23,24 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.agents.repair_agent import RepairAgent  # noqa: E402
 from src.lib.repair_config import BUDGET, CONNECTOR, IS_ACP, REPAIR_SKILL, TRANSPORT  # noqa: E402
 from src.lib.runner import WF_OUT, default_run_mode  # noqa: E402
-from src.tasks.apply_patch import ApplyPatch  # noqa: E402
-from src.tasks.decide import Decide  # noqa: E402
-from src.tasks.repair_report import RepairReport  # noqa: E402
-from src.tasks.run_kernel import RunKernel  # noqa: E402
+from src.workflows.repair_flow import repair_flow  # noqa: E402
 from wfpy import connect, run, workflow  # noqa: E402
 
 
 @workflow(inputs={"Kernel": str}, outputs={"Out": str})
 def repair_kernel() -> None:
-    """Five actors, with the feedback edge closing back onto RunKernel.Retry."""
-    runner = RunKernel(run_mode=default_run_mode())
-    decide = Decide(budget=BUDGET)
-    repair = RepairAgent()
-    patch = ApplyPatch()
-    report = RepairReport()
+    """One node: the repair flow, wired straight to the boundary ports.
 
-    connect("Kernel", runner.Initial)
-    connect(runner.Result, decide.Result)
+    The flow's ``Report`` file output is left unconnected on purpose -- the flow
+    still writes the report to disk, this entry point just has no viewer to hand
+    it to.
+    """
+    flow = repair_flow()
 
-    connect(decide.Done, report.Done)
-    connect(decide.Exhausted, report.Exhausted)
-
-    # The loop: repair -> patch -> back into the runner's second input port.
-    connect(decide.Repair, repair.Failure)
-    connect(repair.Patched, patch.Patched)
-    connect(patch.Kernel, runner.Retry)
-
-    connect(report.Out, "Out")
+    connect("Kernel", flow.Kernel)
+    connect(flow.Verdict, "Out")
 
 
 def main() -> int:
@@ -78,7 +61,8 @@ def main() -> int:
     lines = result["Out"] or ["(no output)"]
     for line in lines:
         print(line)
-    return 0 if any(ln.startswith("REPAIRED") for ln in lines) else 1
+    # "ALREADY OK" counts as success: the kernel passed without needing the agent.
+    return 0 if any(ln.startswith(("REPAIRED", "ALREADY OK")) for ln in lines) else 1
 
 
 if __name__ == "__main__":
