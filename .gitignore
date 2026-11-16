@@ -4,3 +4,6 @@ wf-out/
 output/
 __pycache__/
 *.pyc
+
+# wfpy regenerates these graph-layout coordinates on every `wfpy plan`
+.layout/
