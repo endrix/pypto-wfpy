@@ -45,7 +45,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from _nodes import Gate, Prepare, RunResult, RunSim  # noqa: E402
+from _nodes import Gate, Prepare, RunResult, RunSim, default_run_mode  # noqa: E402
 from wfpy import Port, action, agent, connect, guard, run, task, workflow  # noqa: E402
 
 BUDGET = int(os.environ.get("PYPTO_REPAIR_BUDGET", "2"))
@@ -146,13 +146,22 @@ class Budget:
 
 
 @agent(
-    prompt=REPAIR_PROMPT,
-    transport=TRANSPORT,
-    skill=REPAIR_SKILL,  # None when the cannbot skills are not on disk
+    prompt="You are fixing a PyPTO (Ascend NPU) Tensor-mode kernel that fails\nits own numeric self-check against a pure-torch reference.\n\nRules:\n- Reply with the COMPLETE corrected Python file and nothing else. No prose, no fences.\n- Change only what is needed to make the numeric check pass.\n- Keep the `--run_mode {sim,npu}` flag, the PASS:/FAIL: prints and the exit codes.\n- `pypto.mean` does not exist in this version; use `pypto.sum`.\n- Set vector tiles with `pypto.set_vec_tile_shapes` before vector ops and cube\n  tiles with `pypto.set_cube_tile_shapes` before `pypto.matmul`.\n- For a reduction, the tile must span the whole reduced axis.\n",
+    transport="mock",
+    skill="pypto-precision-debug",  # None when the cannbot skills are not on disk
     # The mock reply is deliberately NOT a fix: the loop then runs to its budget,
     # which is what makes termination observable offline.
     mock_outputs={"Patched": "# mock transport: no real repair was attempted\n"},
-)
+model="openai/gpt-4o",
+    timeoutMs=120000,
+    contextBudget=50,
+    useClaudeAgent=False,
+    useSkill=True,
+    usePrompt=True,
+    stateful=False,
+    truncationStrategy="sliding",
+    reasoningEffort="None",
+    useSkillHooks=True)
 class RepairAgent:
     class Ports:
         Failure = Port[str](direction="in")
@@ -211,7 +220,7 @@ class Report:
 def repair_kernel() -> None:
     """Wire the repair loop, including the feedback edge."""
     feed = Feed()
-    prepare = Prepare(run_mode="sim")
+    prepare = Prepare(run_mode=default_run_mode())
     runner = RunSim()
     gate = Gate()
     budget = Budget(budget=BUDGET)

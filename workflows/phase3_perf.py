@@ -27,7 +27,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from _nodes import Prepare, RunResult, RunSim  # noqa: E402
+from _nodes import Prepare, RunResult, RunSim, default_run_mode  # noqa: E402
 from wfpy import Port, action, connect, run, task, workflow  # noqa: E402
 
 DEFAULT_KERNELS = [
@@ -199,7 +199,7 @@ class Analyze:
 @workflow(inputs={"Kernel": str}, outputs={"Report": str})
 def analyze_perf() -> None:
     """Wire the four perf phases together."""
-    prepare = Prepare(run_mode="sim")
+    prepare = Prepare(run_mode=default_run_mode())
     runner = RunSim()
     collect = CollectPerf()
     analyze = Analyze()

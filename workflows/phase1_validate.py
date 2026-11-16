@@ -36,7 +36,7 @@ import sys
 # wfpy loads this file by path; make sibling modules importable either way.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from _nodes import Gate, Prepare, RunResult, RunSim  # noqa: E402
+from _nodes import Gate, Prepare, RunResult, RunSim, default_run_mode  # noqa: E402
 from wfpy import Port, action, connect, run, task, workflow  # noqa: E402
 
 DEFAULT_KERNELS = [
@@ -67,7 +67,7 @@ class Report:
 @workflow(inputs={"Kernel": str}, outputs={"Out": str})
 def validate_kernel() -> None:
     """Wire the four phases together."""
-    prepare = Prepare(run_mode="sim")
+    prepare = Prepare(run_mode=default_run_mode())
     runner = RunSim()
     gate = Gate()
     report = Report()

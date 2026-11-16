@@ -36,7 +36,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from _nodes import LOCK, RunResult, execute_job, make_job  # noqa: E402
+from _nodes import LOCK, RunResult, default_run_mode, execute_job, make_job  # noqa: E402
 from wfpy import Port, action, connect, run, task, workflow  # noqa: E402
 
 DEFAULT_KERNELS = [
@@ -144,8 +144,11 @@ class Summary:
 
         lines = []
         for r in sorted(best, key=lambda x: x.job.slot):
+            where = f"slot {r.job.slot}, {r.job.run_mode}"
+            if r.job.run_mode == "npu":
+                where += f" dev{r.job.device_id}"
             if r.passed:
-                lines.append(f"  PASS  {r.job.name:<22} {r.seconds}s  (slot {r.job.slot})")
+                lines.append(f"  PASS  {r.job.name:<22} {r.seconds}s  ({where})")
             else:
                 lines.append(f"  FAIL  {r.job.name:<22} rc={r.rc}  {r.error[:60]}")
         passed = sum(1 for r in best if r.passed)
@@ -169,7 +172,7 @@ def validate_pool() -> None:
     dispatch = Dispatch()
     join = Join()
     summary = Summary()
-    workers = [Workers[i](run_mode="sim") for i in range(POOL)]
+    workers = [Workers[i](run_mode=default_run_mode()) for i in range(POOL)]
 
     connect("Kernels", dispatch.Kernels)
     for i, worker in enumerate(workers):

@@ -26,6 +26,32 @@ IR_RUNNER = REPO_ROOT / "tools" / "run_with_ir.py"
 # Join actors accumulate into state while several worker slots fire at once.
 LOCK = threading.Lock()
 
+# Device ids to spread concurrent slots over. One kernel per device: two runs
+# sharing a device serialise on it, which would hide the parallelism.
+DEVICES = [int(d) for d in os.environ.get("PYPTO_DEVICES", "0,1,2,3,4,5,6,7").split(",") if d.strip()]
+
+
+def torch_npu_available() -> bool:
+    """Whether the NPU backend is importable in this interpreter."""
+    try:
+        import torch_npu  # noqa: F401
+    except Exception:
+        return False
+    return True
+
+
+def default_run_mode() -> str:
+    """Run on the NPU when the backend is present, else fall back to the simulator.
+
+    PYPTO_RUN_MODE forces either one. Sim mode is the Soc CAModel on CPU: it
+    needs no device, but it is 100-1000x slower than hardware and its cycle
+    counts are a model, not a measurement.
+    """
+    forced = os.environ.get("PYPTO_RUN_MODE", "").strip().lower()
+    if forced in ("npu", "sim"):
+        return forced
+    return "npu" if torch_npu_available() else "sim"
+
 
 def first_error(stdout: str, stderr: str) -> str:
     """Pick the most informative failure line.
@@ -54,6 +80,7 @@ class JobSpec:
     work_dir: str
     cmd: tuple[str, ...]
     slot: int = 0
+    device_id: int = 0
 
 
 @dataclass(frozen=True)
@@ -104,6 +131,7 @@ def make_job(kernel: str, run_mode: str, suffix: str = "", slot: int = 0,
         work_dir=str(work_dir),
         cmd=cmd,
         slot=slot,
+        device_id=DEVICES[slot % len(DEVICES)] if DEVICES else 0,
     )
 
 
@@ -112,12 +140,17 @@ def execute_job(job: JobSpec, timeout_s: int) -> RunResult:
     if not job.exists:
         return RunResult(job=job, rc=-1, stdout="", error="kernel file not found", seconds=0.0)
 
+    env = os.environ.copy()  # carries the CANN env + PYTHONPATH
+    # The kernels read TILE_FWK_DEVICE_ID; give each slot its own device so
+    # concurrent runs do not serialise on one.
+    env["TILE_FWK_DEVICE_ID"] = str(job.device_id)
+
     started = time.time()
     try:
         proc = subprocess.run(
             list(job.cmd),
             cwd=job.work_dir,
-            env=os.environ.copy(),  # carries the CANN env + PYTHONPATH
+            env=env,
             capture_output=True,
             text=True,
             timeout=timeout_s,

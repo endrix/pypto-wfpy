@@ -38,7 +38,11 @@ import subprocess
 import sys
 import time
 
-from wfpy import Port, action, connect, run, task, workflow
+# wfpy loads this file by path; make sibling modules importable either way.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from _nodes import default_run_mode  # noqa: E402
+from wfpy import Port, action, connect, run, task, workflow  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 IR_RUNNER = REPO_ROOT / "tools" / "run_with_ir.py"
@@ -337,7 +341,7 @@ class DiffIR:
 @workflow(inputs={"Kernel": str}, outputs={"Report": str})
 def inspect_ir() -> None:
     """Wire the four IR phases together."""
-    prepare = PrepareIR(run_mode="sim")
+    prepare = PrepareIR(run_mode=default_run_mode())
     runner = RunWithIR()
     collect = CollectIR()
     differ = DiffIR()

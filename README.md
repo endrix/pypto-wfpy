@@ -31,11 +31,36 @@ workflows and the kernels share one interpreter.
 source /usr/local/Ascend/ascend-toolkit/set_env.sh
 
 python3 -m venv --system-site-packages .venv
-./.venv/bin/pip install numpy torch pyyaml matplotlib pandas
+./.venv/bin/pip install --index-url https://download.pytorch.org/whl/cpu torch
+./.venv/bin/pip install numpy pyyaml matplotlib pandas
 ./.venv/bin/pip install -e /home/endrix/git/workflow/wfpy
 ```
 
+> **Do not `pip install torch_npu` here.** The PyPI wheels abort at import on
+> this host, and because modern torch auto-loads the NPU backend through an
+> entry point, having it installed breaks plain `import torch` and therefore
+> *simulator* runs too. Details in `examples/README.md`.
+>
+> Use the CPU index for torch: the default index serves a `+cu130` build that
+> drags ~3GB of unusable `nvidia-*` wheels onto an Ascend box.
+
 `run.sh` sources the CANN env itself, so every command below works from a bare shell.
+
+### Run mode: device or simulator
+
+The workflows auto-detect. `default_run_mode()` returns `npu` when `torch_npu`
+imports, else falls back to `sim`; `PYPTO_RUN_MODE=npu|sim` forces either.
+
+- **`npu`** runs on the real hardware. Tensor mode fully supports this host's
+  910B2s — the Pro-mode arch limit below does *not* apply. Needs `torch_npu`,
+  whose version must match `torch` exactly.
+- **`sim`** is the Soc CAModel on CPU. No device needed, but it is 100-1000x
+  slower than hardware and its cycle counts are a **cost model, not a
+  measurement**.
+
+Concurrent slots get one device each via `TILE_FWK_DEVICE_ID`
+(`PYPTO_DEVICES`, default `0,1,2,3,4,5,6,7`). Without that, pooled runs would
+serialise on device 0 and the measured speed-up would be an artefact.
 
 ## Phase 1 — validate
 
@@ -124,6 +149,11 @@ All three are memory-bound, not compute-bound. Two independent signals agree:
 tile-op work profile while `matmul` is only 8,192. `Cube` reads 0% for the two
 vector-only kernels, as it should.
 
+> **These figures come from the simulator**, so they are a cost model's
+> prediction rather than a hardware measurement. Treat the *ranking* as the
+> signal and the absolute cycle counts as indicative. Run with
+> `PYPTO_RUN_MODE=npu` for real timings, and expect them to differ.
+
 ## Phase 4 — bounded repair loop
 
 A loop in wfpy is an ordinary feedback edge with no backpressure, so it **must**
@@ -188,3 +218,8 @@ PyPTO **Pro** (`pypto_pro`) needs a full 0.3.0 source build *and* 950PR/950DT
 silicon — `pypto_pro/runtime/platform.py` maps only `DAV_3510` and `DAV_9201`,
 while this host reports `DAV_2201` (910B2). Tensor mode runs here today with no
 build at all. See `examples/README.md`.
+
+This is a limit on **Pro mode only**, and is unrelated to the device/simulator
+choice above: Tensor mode runs on these 910B2s natively. If a workflow reports
+`sim`, that means `torch_npu` is missing or `PYPTO_RUN_MODE=sim` is set — not
+that the hardware is unsupported.

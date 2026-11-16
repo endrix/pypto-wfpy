@@ -28,8 +28,32 @@ missing from a bare interpreter.
 source /usr/local/Ascend/ascend-toolkit/set_env.sh   # puts CANN's site-packages on PYTHONPATH
 
 python3 -m venv --system-site-packages .venv
-./.venv/bin/pip install numpy torch pyyaml   # + matplotlib for swimlane plots
+./.venv/bin/pip install numpy torch pyyaml matplotlib pandas
 ```
+
+`import pypto` hard-depends on `torch` (via `pypto/cost_model.py`), so torch is
+needed even for simulator runs.
+
+**Device runs are not working from PyPI wheels here.** `torch_npu` 2.13.0 and
+2.14.0, each paired with the matching upstream `torch`, both abort on import:
+
+```
+terminate called after throwing an instance of 'c10::ValueError'
+  what():  Duplicated key 'pinned_reserve_segment_size_mb' found in
+           device-specific configuration parser hook registration
+```
+
+It is a hard `terminate()`, not a catchable Python error. Modern torch
+auto-loads the NPU backend through an entry point
+(`torch/__init__.py:_import_device_backends`), and that registration collides;
+`TORCH_DEVICE_BACKEND_AUTOLOAD=0` plus an explicit `import torch_npu` fails the
+same way. Note this breaks **simulator** runs too while `torch_npu` is
+installed, because plain `import torch` triggers the autoload — so uninstall it
+if you are not chasing device execution.
+
+The supported route is Ascend's own torch build or the CANN Docker image, which
+ships a known-good torch/torch_npu/CANN triple; `pro/docs/en/install/
+prepare_environment.md` points at the image rather than pinning pip versions.
 
 Note the installed package is pypto **0.2.1** (from CANN 9.2.0-beta.2), while the
 `pro/` source tree is 0.3.0. Do not put `pro/python` on `PYTHONPATH` to "upgrade"
