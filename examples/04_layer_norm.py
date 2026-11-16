@@ -8,12 +8,16 @@ over the hidden axis (mean, then variance of the centred values), broadcasts eac
 
 Three things have to be right at once, and none of them fail loudly:
 
-1. The vector tile must span the **whole** hidden axis, or each reduction is
-   computed over part of a row and the output is plausible but wrong.
-2. Both reductions must be over ``dim=-1``. Reducing ``dim=0`` also produces a
+1. Both reductions must be over ``dim=-1``. Reducing ``dim=0`` also produces a
    correctly shaped, finite result.
+2. The variance is the mean of the squared **centred** values. Using ``x`` itself
+   computes E[x^2] rather than Var(x), which is finite and plausible and wrong.
 3. ``pypto.mean`` does not exist in this version -- a mean is ``pypto.sum`` over
    the axis divided by the axis length.
+
+The tile below spans the whole hidden axis, but that is a performance choice:
+PyPTO splits a reduction across tiles correctly, so a narrower tile changes the
+subgraph structure without changing the result.
 
 Run:
     python3 04_layer_norm.py --run_mode sim

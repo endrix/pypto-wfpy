@@ -6,6 +6,7 @@
 #   ./run.sh ir       [kernel.py ...]   # phase 2: per-pass IR diff report
 #   ./run.sh perf     [kernel.py ...]   # phase 3: bottleneck from sim counters
 #   ./run.sh repair   <kernel.py>       # phase 4: bounded agent repair loop
+#   ./run.sh repair-softmax [kernel.py] # repair from a file source, ends in a viewer
 #   ./run.sh plan     <workflow.py>     # dump the wfpy graph as JSON
 #   ./run.sh wfpy     run <args...>    # raw wfpy passthrough, wf-out pinned
 #
@@ -58,12 +59,14 @@ case "$cmd" in
     ir)       exec "$PY" "$ROOT/src/ir.py" "$@" ;;
     perf)     exec "$PY" "$ROOT/src/perf.py" "$@" ;;
     repair)   exec "$PY" "$ROOT/src/repair.py" "$@" ;;
+    repair-softmax) exec "$PY" "$ROOT/src/repair_softmax.py" "$@" ;;
     plan)
         wf="${1:?usage: ./run.sh plan <workflow.py>}"
         case "$(basename "$wf")" in
             ir.py)      name=inspect_ir ;;
             perf.py)    name=analyze_perf ;;
-            repair.py)  name=repair_kernel ;;
+            repair.py)          name=repair_kernel ;;
+            repair_softmax.py)  name=repair_softmax ;;
             pool.py)    name=validate_pool ;;
             *)          name=validate_kernel ;;
         esac

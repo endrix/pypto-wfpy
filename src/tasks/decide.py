@@ -28,9 +28,9 @@ class Decide:
 
     class Ports:
         Result = Port[Outcome](direction="in")
-        Repair = Port[str](direction="out")
         Done = Port[Outcome](direction="out")
         Exhausted = Port[Outcome](direction="out")
+        Repair = Port[str](direction="out")
 
     def _remember(self, outcome: Outcome) -> None:
         if self._baseline is None:

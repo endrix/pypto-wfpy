@@ -3,9 +3,13 @@
 """Row-wise softmax on PyPTO (Tensor mode).
 
 Exercises a *reduction* kernel: unlike a pure elementwise chain, each output
-element depends on a whole row, so the vector tile is shaped to span the full
-reduction axis (``VEC_TILE[1] == SHAPE[1]``). Getting that wrong is the classic
-source of wrong-shape / partial-reduction bugs, which is why it is its own example.
+element depends on a whole row.
+
+The tile below spans the full reduction axis (``VEC_TILE[1] == SHAPE[1]``), which
+is a reasonable default, but note that is a **performance** choice and not a
+correctness one: PyPTO splits a reduction across tiles correctly, and this kernel
+still passes with tiles as narrow as ``(8, 16)`` on a 128-wide reduction
+(measured). The failure mode that does matter is reducing the wrong axis.
 
 Run:
     python3 02_row_softmax.py --run_mode sim    # CPU Soc CAModel, no NPU needed

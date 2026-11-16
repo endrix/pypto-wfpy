@@ -73,7 +73,10 @@ def first_error(stdout: str, stderr: str) -> str:
 def make_job(kernel: str, run_mode: str, suffix: str = "", slot: int = 0,
              via_ir_runner: bool = False, extra_args: tuple[str, ...] = ()) -> JobSpec:
     """Resolve a kernel path into a JobSpec with its own work dir."""
-    path = Path(kernel)
+    # str() rather than Path(kernel) directly: a @source emits its File
+    # parameter as the dataclass, not as a resolved path string, so a kernel can
+    # arrive here as File, str or Path. File.__str__ gives its path.
+    path = Path(str(kernel))
     if not path.is_absolute():
         path = REPO_ROOT / path
     name = path.stem

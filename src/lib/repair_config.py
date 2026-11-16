@@ -36,5 +36,8 @@ Rules:
 - `pypto.mean` does not exist in this version; use `pypto.sum` over the axis.
 - Set vector tiles with `pypto.set_vec_tile_shapes` before vector ops and cube
   tiles with `pypto.set_cube_tile_shapes` before `pypto.matmul`.
-- For a reduction, the tile must span the whole reduced axis.
+- Reduce over the intended axis: `dim=-1` reduces rows, `dim=0` reduces columns.
+- Tile shape is a performance choice, not a correctness one. PyPTO splits a
+  reduction across tiles correctly even when a tile does not span the reduced
+  axis, so do not "fix" a tile shape unless the failure is actually about it.
 """

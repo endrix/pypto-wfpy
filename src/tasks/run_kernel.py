@@ -4,8 +4,6 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
-from pathlib import Path
 import sys
 
 from src.lib import graph
@@ -46,7 +44,9 @@ class RunKernel:
         # "run", not "attempt": this counts kernel runs, while Decide counts
         # repair requests. A budget of N means N repairs and so N+1 runs.
         print(
-            f"[repair] run {self._n}: {Path(kernel).stem} -> "
+            # job.name, not Path(kernel).stem: the kernel token can arrive as a
+            # File dataclass from a @source, and make_job already resolved it.
+            f"[repair] run {self._n}: {job.name} -> "
             f"{'ok' if outcome.ok else outcome.why()} "
             f"[compiled={summary.compiled} leaves={summary.block_leaves}]",
             file=sys.stderr,
