@@ -7,8 +7,8 @@ from __future__ import annotations
 import difflib
 from pathlib import Path
 
-from src.graph import DUMP_RE, level_of
-from src.records import IRRun, PassDiff
+from src.lib.graph import DUMP_RE, level_of
+from src.lib.records import IRRun, PassDiff
 from wfpy import Port, action, task
 
 

@@ -25,11 +25,11 @@ from __future__ import annotations
 from pathlib import Path
 import sys
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.agents.repair_agent import RepairAgent  # noqa: E402
-from src.repair_config import BUDGET, CONNECTOR, IS_ACP, REPAIR_SKILL, TRANSPORT  # noqa: E402
-from src.runner import WF_OUT, default_run_mode  # noqa: E402
+from src.lib.repair_config import BUDGET, CONNECTOR, IS_ACP, REPAIR_SKILL, TRANSPORT  # noqa: E402
+from src.lib.runner import WF_OUT, default_run_mode  # noqa: E402
 from src.tasks.apply_patch import ApplyPatch  # noqa: E402
 from src.tasks.decide import Decide  # noqa: E402
 from src.tasks.repair_report import RepairReport  # noqa: E402

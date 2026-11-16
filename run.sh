@@ -53,11 +53,11 @@ cmd="${1:-validate}"
 shift || true
 
 case "$cmd" in
-    validate) exec "$PY" "$ROOT/src/workflows/validate.py" "$@" ;;
-    pool)     exec "$PY" "$ROOT/src/workflows/pool.py" "$@" ;;
-    ir)       exec "$PY" "$ROOT/src/workflows/ir.py" "$@" ;;
-    perf)     exec "$PY" "$ROOT/src/workflows/perf.py" "$@" ;;
-    repair)   exec "$PY" "$ROOT/src/workflows/repair.py" "$@" ;;
+    validate) exec "$PY" "$ROOT/src/validate.py" "$@" ;;
+    pool)     exec "$PY" "$ROOT/src/pool.py" "$@" ;;
+    ir)       exec "$PY" "$ROOT/src/ir.py" "$@" ;;
+    perf)     exec "$PY" "$ROOT/src/perf.py" "$@" ;;
+    repair)   exec "$PY" "$ROOT/src/repair.py" "$@" ;;
     plan)
         wf="${1:?usage: ./run.sh plan <workflow.py>}"
         case "$(basename "$wf")" in

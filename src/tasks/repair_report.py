@@ -4,8 +4,8 @@
 
 from __future__ import annotations
 
-from src.records import Outcome
-from src.repair_config import BUDGET
+from src.lib.records import Outcome
+from src.lib.repair_config import BUDGET
 from wfpy import Port, action, task
 
 

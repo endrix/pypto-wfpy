@@ -6,8 +6,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.perf import parse_stat_report, parse_tile_ops
-from src.records import PerfData, RunResult
+from src.lib.sim_report import parse_stat_report, parse_tile_ops
+from src.lib.records import PerfData, RunResult
 from wfpy import Port, action, task
 
 

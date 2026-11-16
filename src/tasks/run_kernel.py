@@ -8,9 +8,9 @@ from dataclasses import replace
 from pathlib import Path
 import sys
 
-from src import graph
-from src.records import Outcome
-from src.runner import execute_job, make_job
+from src.lib import graph
+from src.lib.records import Outcome
+from src.lib.runner import execute_job, make_job
 from wfpy import Port, action, task
 
 

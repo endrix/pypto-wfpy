@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from src.runner import LOCK
+from src.lib.runner import LOCK
 from wfpy import Port, action, task
 
 

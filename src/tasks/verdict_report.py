@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from src.records import RunResult
+from src.lib.records import RunResult
 from wfpy import Port, action, task
 
 

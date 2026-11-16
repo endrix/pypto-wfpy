@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from src.repair_config import CONNECTOR, IS_ACP, PROMPT, REPAIR_SKILL, TIMEOUT_MS, TRANSPORT
+from src.lib.repair_config import CONNECTOR, IS_ACP, PROMPT, REPAIR_SKILL, TIMEOUT_MS, TRANSPORT
 from wfpy import Port, agent
 
 

@@ -1,61 +1,64 @@
 #!/usr/bin/env python3
 # coding: utf-8
-"""Parsing for the simulator's performance report. Plain helpers, no actors."""
+"""Read the simulator's performance data and name the bottleneck.
+
+    "Kernel" --> Prepare --> RunSim --> CollectPerf --> AnalyzePerf --> "Report"
+
+Only works in sim mode: a device run writes compiled kernels and no performance
+data, so this reports SKIP on hardware.
+
+Run:
+    ./run.sh perf [kernel.py ...]
+"""
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
-import re
+import sys
 
-# "Average MTE_IN Usage............................:   4387.00   19.86%"
-# "Total Cycles....................................:     22087"
-STAT_RE = re.compile(r"^\s*\|?-*\s*(.+?)\.{2,}:\s*([\d.]+)(?:\s+([\d.]+)%)?\s*$")
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-# The pipes a tile kernel can be limited by, in report order.
-PIPES = ("Cube", "Vector", "MTE_IN", "MTE1", "MTE_OUT")
+from src.lib.runner import WF_OUT, default_run_mode  # noqa: E402
+from src.tasks.analyze_perf import AnalyzePerf  # noqa: E402
+from src.tasks.collect_perf import CollectPerf  # noqa: E402
+from src.tasks.prepare import Prepare  # noqa: E402
+from src.tasks.run_sim import RunSim  # noqa: E402
+from wfpy import connect, run, workflow  # noqa: E402
 
-# Counters worth surfacing out of the many the report prints.
-INTERESTING = (
-    "Total Submit Tasks", "Cube Tasks", "Vector Tasks",
-    "Average Task Cycles", "Max Task Cycles", "Min Task Cycles",
-    "Core Machine Count", "Cube Count", "Vector Count",
-)
-
-
-def parse_stat_report(path: Path) -> tuple[float, dict, dict, dict]:
-    """Parse the MachineModel text report into (cycles, pipe%, pipe_cycles, counters)."""
-    total_cycles = 0.0
-    pipe_pct: dict[str, float] = {}
-    pipe_cycles: dict[str, float] = {}
-    counters: dict[str, float] = {}
-
-    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
-        matched = STAT_RE.match(line)
-        if not matched:
-            continue
-        label, value, pct = matched.group(1).strip(), float(matched.group(2)), matched.group(3)
-
-        # "Total Cycles" appears once per section; the first is the whole run.
-        if label == "Total Cycles" and not total_cycles:
-            total_cycles = value
-
-        pipe = next((p for p in PIPES if label == f"Average {p} Usage"), None)
-        if pipe is not None:
-            pipe_cycles[pipe] = value
-            if pct is not None:
-                pipe_pct[pipe] = float(pct)
-        elif pct is None:
-            counters.setdefault(label, value)
-
-    return total_cycles, pipe_pct, pipe_cycles, counters
+DEFAULT_KERNELS = [
+    "examples/01_fused_elementwise.py",
+    "examples/02_row_softmax.py",
+    "examples/03_fused_linear.py",
+    "examples/04_layer_norm.py",
+]
 
 
-def parse_tile_ops(path: Path) -> dict:
-    """Pull per-tile-op work amounts out of the perf metrics JSON."""
-    try:
-        data = json.loads(path.read_text(encoding="utf-8", errors="replace"))
-    except (OSError, json.JSONDecodeError):
-        return {}
-    paths = (data.get("summary") or {}).get("tileOpLongestPaths") or {}
-    return {name: info.get("amountLp", 0) for name, info in paths.items() if isinstance(info, dict)}
+@workflow(inputs={"Kernel": str}, outputs={"Report": str})
+def analyze_perf() -> None:
+    """Wire the four perf phases together."""
+    prepare = Prepare(run_mode=default_run_mode())
+    runner = RunSim()
+    collect = CollectPerf()
+    analyze = AnalyzePerf()
+
+    connect("Kernel", prepare.Kernel)
+    connect(prepare.Job, runner.Job)
+    connect(runner.Result, collect.Result)
+    connect(collect.Perf, analyze.Perf)
+    connect(analyze.Report, "Report")
+
+
+def main() -> int:
+    kernels = sys.argv[1:] or DEFAULT_KERNELS
+    failures = 0
+    for kernel in kernels:
+        result = run(analyze_perf, inputs={"Kernel": kernel}, out_dir=str(WF_OUT))
+        for line in result["Report"] or ["(no output)"]:
+            print(line)
+            if line.startswith(("SKIP", "(no")):
+                failures += 1
+    return 1 if failures else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

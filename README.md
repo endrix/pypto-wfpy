@@ -18,15 +18,17 @@ without touching the others.
 ```
 examples/           four verified PyPTO Tensor-mode kernels (see examples/README.md)
 fixtures/           deliberately broken kernels, for testing the repair loop
+src/validate.py     the five top-level workflows live at the src/ root
+src/pool.py
+src/ir.py
+src/perf.py
+src/repair.py
+src/workflows/      sub-workflows, when a workflow is instantiated inside another
 src/tasks/          one @task per file
 src/agents/         one @agent per file
-src/tools/          one @tool per file (empty for now)
-src/workflows/      one @workflow per file -- wiring and CLI entry, no actors
-src/records.py      token dataclasses
-src/runner.py       paths, run-mode detection, subprocess execution
-src/graph.py        IR dump parsing and the structural summary
-src/perf.py         simulator report parsing
-src/repair_config.py  repair-loop settings and the agent prompt
+src/tools/          one @tool per file
+src/lib/            shared non-actor code: records, runner, graph, sim_report,
+                    repair_config
 tools/              run_with_ir.py -- per-pass IR dumping without editing a kernel
 runs/               per-kernel work dirs: reports, diffs, simulator output
 wf-out/             wfpy run dirs: journals, queue traces, agent transcripts
@@ -34,15 +36,20 @@ wf-out/             wfpy run dirs: journals, queue traces, agent transcripts
 
 **One actor per file.** Every `@task`, `@agent` and `@tool` lives in its own
 module, and a workflow file contains only its `@workflow` wiring plus a CLI
-entry. Shared *data types* and plain helpers may share a module -- the rule is
-about actors. This mirrors `wfpy-skillyard`'s layout, keeps a node diffable on
-its own, and makes a graph's shape readable from the directory listing.
+entry. This mirrors `wfpy-skillyard`, keeps a node diffable on its own, and makes
+a graph's shape readable from the directory listing.
 
-Because wfpy loads a workflow by path, each workflow file puts the project root
-on `sys.path` before its `src.*` imports:
+**The `src/` root holds workflows, not library code.** A file at `src/*.py` is an
+entry point you can run. Shared non-actor code -- dataclasses, path handling,
+parsers, config -- lives in `src/lib/`, so the root stays a list of what this
+project *does*. Sub-workflows (a `@workflow` instantiated inside another) go in
+`src/workflows/`.
+
+Because wfpy loads a workflow by path, each one puts the project root on
+`sys.path` before its `src.*` imports:
 
 ```python
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 ```
 
 Both `runs/` and `wf-out/` are always inside the repo, whatever directory you

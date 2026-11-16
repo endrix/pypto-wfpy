@@ -6,8 +6,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.perf import INTERESTING
-from src.records import PerfData
+from src.lib.sim_report import INTERESTING
+from src.lib.records import PerfData
 from wfpy import Port, action, task
 
 

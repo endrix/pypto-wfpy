@@ -6,8 +6,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.records import RunResult
-from src.runner import LOCK
+from src.lib.records import RunResult
+from src.lib.runner import LOCK
 from wfpy import Port, action, task
 
 

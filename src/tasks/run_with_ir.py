@@ -6,8 +6,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.records import IRRun, JobSpec
-from src.runner import execute_job
+from src.lib.records import IRRun, JobSpec
+from src.lib.runner import execute_job
 from wfpy import Port, action, task
 
 

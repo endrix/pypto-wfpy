@@ -18,9 +18,9 @@ import sys
 
 # wfpy loads a workflow by path, so put the project root on sys.path before the
 # src.* imports below.
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.runner import WF_OUT, default_run_mode  # noqa: E402
+from src.lib.runner import WF_OUT, default_run_mode  # noqa: E402
 from src.tasks.gate import Gate  # noqa: E402
 from src.tasks.prepare import Prepare  # noqa: E402
 from src.tasks.run_sim import RunSim  # noqa: E402

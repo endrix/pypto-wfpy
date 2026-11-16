@@ -21,9 +21,9 @@ import os
 from pathlib import Path
 import sys
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.runner import WF_OUT, default_run_mode  # noqa: E402
+from src.lib.runner import WF_OUT, default_run_mode  # noqa: E402
 from src.tasks.dispatch import make_dispatch  # noqa: E402
 from src.tasks.join import make_join  # noqa: E402
 from src.tasks.pool_summary import PoolSummary  # noqa: E402

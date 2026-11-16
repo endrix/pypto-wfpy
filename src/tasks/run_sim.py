@@ -4,8 +4,8 @@
 
 from __future__ import annotations
 
-from src.records import JobSpec, RunResult
-from src.runner import execute_job
+from src.lib.records import JobSpec, RunResult
+from src.lib.runner import execute_job
 from wfpy import Port, action, task
 
 

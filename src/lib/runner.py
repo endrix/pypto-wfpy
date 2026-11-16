@@ -15,9 +15,10 @@ import sys
 import threading
 import time
 
-from src.records import JobSpec, RunResult
+from src.lib.records import JobSpec, RunResult
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+# src/lib/runner.py -> parents[0]=lib, [1]=src, [2]=project root.
+REPO_ROOT = Path(__file__).resolve().parents[2]
 IR_RUNNER = REPO_ROOT / "tools" / "run_with_ir.py"
 
 # wfpy defaults out_dir to ./wf-out relative to the *invocation* cwd, which

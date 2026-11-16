@@ -7,7 +7,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from src.records import Outcome
+from src.lib.records import Outcome
 from wfpy import Port, action, guard, task
 
 

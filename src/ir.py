@@ -17,9 +17,9 @@ from __future__ import annotations
 from pathlib import Path
 import sys
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.runner import WF_OUT, default_run_mode  # noqa: E402
+from src.lib.runner import WF_OUT, default_run_mode  # noqa: E402
 from src.tasks.collect_ir import CollectIR  # noqa: E402
 from src.tasks.diff_ir import DiffIR  # noqa: E402
 from src.tasks.prepare_ir import PrepareIR  # noqa: E402
