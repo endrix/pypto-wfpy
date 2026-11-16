@@ -174,8 +174,25 @@ GAVE UP   after 2 attempt(s); last tried attempt2 -- exited 0 but printed no PAS
 For a real repair via the `claude` ACP connector (**this spends tokens**):
 
 ```bash
-PYPTO_REPAIR_TRANSPORT=acp ./run.sh repair runs/broken/01_wrong_math.py
+./.venv/bin/pip install -e "/home/endrix/git/workflow/wfpy[agent]"   # once
+PYPTO_REPAIR_TRANSPORT=acp PYPTO_REPAIR_BUDGET=1 \
+    ./run.sh repair runs/broken/01_wrong_math.py
 ```
+
+The `[agent]` extra is required: without it the ACP transport reaches
+`_invoke_agent_opencode_acp` and dies on `ModuleNotFoundError: No module named
+'acp'`. `PYPTO_REPAIR_BUDGET=1` caps the run at a single agent call.
+
+Two logging traps when checking whether a live agent really ran:
+
+- The banner always prints `provider=openai, model=gpt-4o`, whatever the
+  transport. It is wfpy's default model metadata, not evidence of the route
+  taken.
+- `wfpy plan` rewrites this file's `@agent` decorator into literals (see the
+  warning comment above it). A previous commit shipped a hardcoded
+  `transport="mock"` while the banner still printed `TRANSPORT`, so
+  `PYPTO_REPAIR_TRANSPORT=acp` reported the agent transport and ran the mock.
+  Re-read the decorator after any `./run.sh plan`.
 
 ### cannbot skills
 

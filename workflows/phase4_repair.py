@@ -50,6 +50,12 @@ from wfpy import Port, action, agent, connect, guard, run, task, workflow  # noq
 
 BUDGET = int(os.environ.get("PYPTO_REPAIR_BUDGET", "2"))
 TRANSPORT = os.environ.get("PYPTO_REPAIR_TRANSPORT", "mock")
+# Which ACP connector the agent spawns on the acp transport; `wfpy connectors`
+# lists what is on the PATH. Ignored by the mock transport.
+CONNECTOR = os.environ.get("PYPTO_REPAIR_CONNECTOR", "claude")
+IS_ACP = TRANSPORT == "acp"
+# A full-file rewrite takes longer than wfpy's 2-minute default.
+TIMEOUT_MS = int(os.environ.get("PYPTO_REPAIR_TIMEOUT_MS", "600000"))
 
 # The cannbot pypto-* skills all target Tensor mode, so they apply to these
 # kernels directly. wfpy resolves `skill=<name>` against WF_SKILLS_ROOT (its
@@ -145,23 +151,22 @@ class Budget:
         return result
 
 
+# NOTE: `wfpy plan` REWRITES this decorator in place, flattening these constants
+# into literals and appending its own camelCase defaults. That silently undoes
+# the env-var wiring below -- a previous commit shipped a hardcoded
+# transport="mock" while the startup banner still printed TRANSPORT, so
+# PYPTO_REPAIR_TRANSPORT=acp claimed to use the agent and did not. If you run
+# `./run.sh plan` on this file, re-check the decorator afterwards.
 @agent(
-    prompt="You are fixing a PyPTO (Ascend NPU) Tensor-mode kernel that fails\nits own numeric self-check against a pure-torch reference.\n\nRules:\n- Reply with the COMPLETE corrected Python file and nothing else. No prose, no fences.\n- Change only what is needed to make the numeric check pass.\n- Keep the `--run_mode {sim,npu}` flag, the PASS:/FAIL: prints and the exit codes.\n- `pypto.mean` does not exist in this version; use `pypto.sum`.\n- Set vector tiles with `pypto.set_vec_tile_shapes` before vector ops and cube\n  tiles with `pypto.set_cube_tile_shapes` before `pypto.matmul`.\n- For a reduction, the tile must span the whole reduced axis.\n",
-    transport="mock",
-    skill="pypto-precision-debug",  # None when the cannbot skills are not on disk
+    prompt=REPAIR_PROMPT,
+    transport=TRANSPORT,
+    connector=CONNECTOR if IS_ACP else "",
+    timeout_ms=TIMEOUT_MS,
+    skill=REPAIR_SKILL,  # None when the cannbot skills are not on disk
     # The mock reply is deliberately NOT a fix: the loop then runs to its budget,
     # which is what makes termination observable offline.
     mock_outputs={"Patched": "# mock transport: no real repair was attempted\n"},
-model="openai/gpt-4o",
-    timeoutMs=120000,
-    contextBudget=50,
-    useClaudeAgent=False,
-    useSkill=True,
-    usePrompt=True,
-    stateful=False,
-    truncationStrategy="sliding",
-    reasoningEffort="None",
-    useSkillHooks=True)
+)
 class RepairAgent:
     class Ports:
         Failure = Port[str](direction="in")
@@ -253,7 +258,11 @@ def main() -> int:
         f"[repair] transport={TRANSPORT} budget={BUDGET} skill={REPAIR_SKILL or '(none)'}",
         file=sys.stderr,
     )
-    result = run(repair_kernel, inputs={"Kernel": sys.argv[1]})
+    result = run(
+        repair_kernel,
+        inputs={"Kernel": sys.argv[1]},
+        acp_connector=CONNECTOR if IS_ACP else None,
+    )
     lines = result["Out"] or ["(no output)"]
     for line in lines:
         print(line)
