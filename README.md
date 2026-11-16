@@ -31,18 +31,25 @@ workflows and the kernels share one interpreter.
 source /usr/local/Ascend/ascend-toolkit/set_env.sh
 
 python3 -m venv --system-site-packages .venv
-./.venv/bin/pip install --index-url https://download.pytorch.org/whl/cpu torch
+./.venv/bin/pip install --index-url https://download.pytorch.org/whl/cpu torch==2.9.0
+./.venv/bin/pip install torch_npu==2.9.0          # device runs; omit for sim only
 ./.venv/bin/pip install numpy pyyaml matplotlib pandas
-./.venv/bin/pip install -e /home/endrix/git/workflow/wfpy
+./.venv/bin/pip install -e "/home/endrix/git/workflow/wfpy[agent]"
 ```
 
-> **Do not `pip install torch_npu` here.** The PyPI wheels abort at import on
-> this host, and because modern torch auto-loads the NPU backend through an
-> entry point, having it installed breaks plain `import torch` and therefore
-> *simulator* runs too. Details in `examples/README.md`.
+> **Pin the torch/torch_npu pair; do not install "latest".** 2.9.0/2.9.0 works
+> here (8 devices visible), as does 2.10.0/2.10.0. But `torch_npu` 2.13.0 and
+> 2.14.0 each abort at import with a C++ `Duplicated key
+> 'pinned_reserve_segment_size_mb'`, and because modern torch auto-loads the NPU
+> backend through an entry point, a broken `torch_npu` breaks plain
+> `import torch` and therefore *simulator* runs too.
 >
 > Use the CPU index for torch: the default index serves a `+cu130` build that
 > drags ~3GB of unusable `nvidia-*` wheels onto an Ascend box.
+>
+> Other venvs on this machine already run the working pair and are the reference
+> if these versions ever stop resolving: `pto-kernels/.venv`,
+> `pto-mlir-cannbench/.venv` (2.9.0) and `workflow/old_wfpy/.venv` (2.10.0).
 
 `run.sh` sources the CANN env itself, so every command below works from a bare shell.
 
@@ -51,12 +58,20 @@ python3 -m venv --system-site-packages .venv
 The workflows auto-detect. `default_run_mode()` returns `npu` when `torch_npu`
 imports, else falls back to `sim`; `PYPTO_RUN_MODE=npu|sim` forces either.
 
-- **`npu`** runs on the real hardware. Tensor mode fully supports this host's
-  910B2s — the Pro-mode arch limit below does *not* apply. Needs `torch_npu`,
-  whose version must match `torch` exactly.
-- **`sim`** is the Soc CAModel on CPU. No device needed, but it is 100-1000x
-  slower than hardware and its cycle counts are a **cost model, not a
-  measurement**.
+- **`npu`** runs on the real hardware, and is verified: all four kernels pass on
+  910B2, spread over devices 0-3. Tensor mode fully supports this host — the
+  Pro-mode arch limit below does *not* apply.
+- **`sim`** is the Soc CAModel on CPU. No device needed, but its cycle counts are
+  a **cost model, not a measurement**.
+
+Note that `perf` (phase 3) only works in `sim`: a device run writes compiled
+kernels and no performance data, so the phase reports `SKIP`. Real device
+profiling is reachable — `pypto.set_debug_options(runtime_debug_mode=1)` emits
+`tilefwk_L1_prof_data.json` (per-core task start/end, in ns),
+`merged_swimlane.json` and `bubble_analysis.log` — but it is a different shape
+from the simulator's report: task timings and waits, not per-pipe utilisation.
+So it cannot directly confirm or refute the simulator's `MTE_IN`-bound verdict;
+that would need msprof-level profiling. Nothing reads it yet.
 
 Concurrent slots get one device each via `TILE_FWK_DEVICE_ID`
 (`PYPTO_DEVICES`, default `0,1,2,3,4,5,6,7`). Without that, pooled runs would

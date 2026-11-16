@@ -28,14 +28,21 @@ missing from a bare interpreter.
 source /usr/local/Ascend/ascend-toolkit/set_env.sh   # puts CANN's site-packages on PYTHONPATH
 
 python3 -m venv --system-site-packages .venv
-./.venv/bin/pip install numpy torch pyyaml matplotlib pandas
+./.venv/bin/pip install numpy torch==2.9.0 pyyaml matplotlib pandas
 ```
 
 `import pypto` hard-depends on `torch` (via `pypto/cost_model.py`), so torch is
 needed even for simulator runs.
 
-**Device runs are not working from PyPI wheels here.** `torch_npu` 2.13.0 and
-2.14.0, each paired with the matching upstream `torch`, both abort on import:
+**Device runs work.** The torch/torch_npu pair must be pinned:
+
+```bash
+pip install --index-url https://download.pytorch.org/whl/cpu torch==2.9.0
+pip install torch_npu==2.9.0      # -> torch.npu.is_available() True, 8 devices
+```
+
+2.10.0/2.10.0 also works. But `torch_npu` 2.13.0 and 2.14.0, each with its
+matching upstream torch, both abort on import:
 
 ```
 terminate called after throwing an instance of 'c10::ValueError'
@@ -43,17 +50,16 @@ terminate called after throwing an instance of 'c10::ValueError'
            device-specific configuration parser hook registration
 ```
 
-It is a hard `terminate()`, not a catchable Python error. Modern torch
-auto-loads the NPU backend through an entry point
-(`torch/__init__.py:_import_device_backends`), and that registration collides;
-`TORCH_DEVICE_BACKEND_AUTOLOAD=0` plus an explicit `import torch_npu` fails the
-same way. Note this breaks **simulator** runs too while `torch_npu` is
-installed, because plain `import torch` triggers the autoload — so uninstall it
-if you are not chasing device execution.
+A hard `terminate()`, not a catchable Python error. Modern torch auto-loads the
+NPU backend through an entry point (`torch/__init__.py:_import_device_backends`),
+and that registration collides; `TORCH_DEVICE_BACKEND_AUTOLOAD=0` plus an
+explicit `import torch_npu` fails the same way. Note a broken `torch_npu` breaks
+**simulator** runs too, because plain `import torch` triggers the autoload.
 
-The supported route is Ascend's own torch build or the CANN Docker image, which
-ships a known-good torch/torch_npu/CANN triple; `pro/docs/en/install/
-prepare_environment.md` points at the image rather than pinning pip versions.
+Docker is not needed for device execution. If these pins ever stop resolving,
+three venvs on this machine already run the working pair and are the reference:
+`pto-kernels/.venv`, `pto-mlir-cannbench/.venv` (2.9.0) and
+`workflow/old_wfpy/.venv` (2.10.0).
 
 Note the installed package is pypto **0.2.1** (from CANN 9.2.0-beta.2), while the
 `pro/` source tree is 0.3.0. Do not put `pro/python` on `PYTHONPATH` to "upgrade"
@@ -70,10 +76,11 @@ source /usr/local/Ascend/ascend-toolkit/set_env.sh
 ./.venv/bin/python examples/01_fused_elementwise.py --run_mode sim
 ```
 
-All three currently pass in sim mode.
+All four pass in both modes.
 
-`--run_mode npu` additionally needs `torch_npu` (not yet installed here) and
-`TILE_FWK_DEVICE_ID` set; the box has 8x 910B2, which Tensor mode does support.
+`--run_mode npu` runs on the real hardware; it reads `TILE_FWK_DEVICE_ID` to pick
+a device (the box has 8x 910B2). A device run writes compiled kernels but no
+performance data, so the `perf` workflow only works in `sim`.
 
 ## Skills
 
