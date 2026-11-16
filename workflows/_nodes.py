@@ -211,7 +211,16 @@ class RunSim:
 
 @task
 class Gate:
-    """Route a result: Ok when the kernel ran and self-verified, else Bad."""
+    """Route a result: Ok when the kernel ran and self-verified, else Bad.
+
+    Both guards are stated in full rather than leaving ``reject`` as an unguarded
+    fallback. With a fallback, a passing result activates *both* actions and only
+    declaration order picks ``accept`` -- and wfpy's model says the choice among
+    several activated actions is nondeterministic, with declaration order an
+    implementation detail of this runtime rather than a promise
+    (docs/dataflow-concepts.md, "Action selection"). Mutually exclusive guards
+    mean exactly one action can ever fire.
+    """
 
     class Ports:
         Result = Port[RunResult](direction="in")
@@ -224,5 +233,6 @@ class Gate:
         return result
 
     @action(consumes={"Result": 1}, produces={"Bad": 1})
-    def reject(self, result: RunResult) -> RunResult:  # no guard -- the fallback
+    @guard(lambda self, result: not result.passed)
+    def reject(self, result: RunResult) -> RunResult:
         return result
