@@ -18,6 +18,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from src.lib import cann  # noqa: E402
 from src.lib.runner import WF_OUT, default_run_mode  # noqa: E402
 from src.tasks.analyze_perf import AnalyzePerf  # noqa: E402
 from src.tasks.collect_perf import CollectPerf  # noqa: E402
@@ -49,6 +50,9 @@ def analyze_perf() -> None:
 
 
 def main() -> int:
+    # Makes an IDE run behave like a run.sh run: run.sh sources
+    # set_env.sh, a direct launch from an IDE does not.
+    cann.apply_to_process()
     kernels = sys.argv[1:] or DEFAULT_KERNELS
     failures = 0
     for kernel in kernels:

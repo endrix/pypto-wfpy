@@ -7,3 +7,8 @@ __pycache__/
 
 # wfpy regenerates these graph-layout coordinates on every `wfpy plan`
 .layout/
+
+# wfpy IDE extension: it relocates completed runs here, and the .vsix files are
+# installer artifacts.
+_wf-out/
+*.vsix

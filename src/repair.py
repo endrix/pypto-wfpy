@@ -24,6 +24,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.lib.repair_config import BUDGET, CONNECTOR, IS_ACP, REPAIR_SKILL, TRANSPORT  # noqa: E402
+from src.lib import cann  # noqa: E402
 from src.lib.runner import WF_OUT, default_run_mode  # noqa: E402
 from src.workflows.repair_flow import repair_flow  # noqa: E402
 from wfpy import connect, run, workflow  # noqa: E402
@@ -44,6 +45,9 @@ def repair_kernel() -> None:
 
 
 def main() -> int:
+    # Makes an IDE run behave like a run.sh run: run.sh sources
+    # set_env.sh, a direct launch from an IDE does not.
+    cann.apply_to_process()
     if len(sys.argv) < 2:
         print("usage: repair.py <kernel.py>", file=sys.stderr)
         return 2

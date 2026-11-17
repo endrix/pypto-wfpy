@@ -32,12 +32,14 @@ Run:
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.lib.repair_config import BUDGET, CONNECTOR, IS_ACP, REPAIR_SKILL, TRANSPORT  # noqa: E402
+from src.lib import cann  # noqa: E402
 from src.lib.runner import REPO_ROOT, WF_OUT, default_run_mode  # noqa: E402
 from src.sources.kernel_source import KernelSource  # noqa: E402
 from src.viewers.repair_report_viewer import RepairReportViewer  # noqa: E402
@@ -46,9 +48,25 @@ from wfpy import File, connect, run, workflow  # noqa: E402
 
 DEFAULT_KERNEL = "fixtures/02_row_softmax_broken.py"
 
-# Resolved at import time: the source's path is a constructor parameter, so the
-# graph has to know it when it is built rather than when it is run.
-_requested = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_KERNEL
+def _requested_kernel() -> str:
+    """Which kernel the source node should hold.
+
+    The source's path is a constructor parameter, so the graph has to know it at
+    BUILD time. That cannot come from sys.argv: whoever imports this module owns
+    argv, and the wfpy IDE extension passes its own flags -- `sys.argv[1]` would
+    then be something like "--workflow" and the graph would be built against a
+    path that does not exist. PYPTO_KERNEL is the supported way to choose one;
+    argv is honoured only when this file is the program being run.
+    """
+    from_env = os.environ.get("PYPTO_KERNEL", "").strip()
+    if from_env:
+        return from_env
+    if __name__ == "__main__" and len(sys.argv) > 1 and not sys.argv[1].startswith("-"):
+        return sys.argv[1]
+    return DEFAULT_KERNEL
+
+
+_requested = _requested_kernel()
 KERNEL_PATH = _requested if Path(_requested).is_absolute() else str(REPO_ROOT / _requested)
 
 
@@ -65,6 +83,9 @@ def repair_softmax() -> None:
 
 
 def main() -> int:
+    # Makes an IDE run behave like a run.sh run: run.sh sources
+    # set_env.sh, a direct launch from an IDE does not.
+    cann.apply_to_process()
     print(
         f"[repair] source={KERNEL_PATH}\n"
         f"[repair] transport={TRANSPORT} budget={BUDGET} mode={default_run_mode()} "

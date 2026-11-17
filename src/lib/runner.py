@@ -15,11 +15,18 @@ import sys
 import threading
 import time
 
+from src.lib import cann
 from src.lib.records import JobSpec, RunResult
 
 # src/lib/runner.py -> parents[0]=lib, [1]=src, [2]=project root.
 REPO_ROOT = Path(__file__).resolve().parents[2]
 IR_RUNNER = REPO_ROOT / "tools" / "run_with_ir.py"
+
+# The interpreter the kernels run under. The project venv is preferred over
+# sys.executable because an IDE may be running the workflow on a different
+# interpreter that has wfpy but not pypto and torch.
+_VENV_PYTHON = REPO_ROOT / ".venv" / "bin" / "python"
+PYTHON = str(_VENV_PYTHON) if _VENV_PYTHON.is_file() else sys.executable
 
 # wfpy defaults out_dir to ./wf-out relative to the *invocation* cwd, which
 # scatters run logs wherever the command happened to be typed. Pin it to the repo.
@@ -33,13 +40,35 @@ LOCK = threading.Lock()
 DEVICES = [int(d) for d in os.environ.get("PYPTO_DEVICES", "0,1,2,3,4,5,6,7").split(",") if d.strip()]
 
 
+_npu_probe: bool | None = None
+
+
 def torch_npu_available() -> bool:
-    """Whether the NPU backend is importable in this interpreter."""
-    try:
-        import torch_npu  # noqa: F401
-    except Exception:
-        return False
-    return True
+    """Whether the NPU backend works in the interpreter that runs the kernels.
+
+    Decided from what is INSTALLED for the kernel interpreter, not by importing
+    here, for two reasons. The
+    kernels run as subprocesses under PYTHON with the CANN environment, so that
+    is the interpreter whose capability matters. And an in-process import cannot
+    succeed from a bare IDE launch anyway: cann.apply_to_process() can set
+    LD_LIBRARY_PATH in os.environ, but the dynamic loader read it at process
+    start, so torch_npu's shared objects would still fail to resolve and the run
+    would silently fall back to sim.
+    """
+    global _npu_probe
+    if _npu_probe is None:
+        # A filesystem check, not a subprocess that imports torch. This runs on
+        # every graph BUILD -- including `wfpy plan`, which the IDE calls
+        # constantly -- and spawning an interpreter to import torch each time
+        # costs seconds and makes the editor feel broken.
+        # No .resolve(): a venv's bin/python is a symlink to the system
+        # interpreter, so resolving it walks out of the venv and globs
+        # /usr/lib/... where torch_npu is not installed.
+        _npu_probe = any(
+            (p / "torch_npu").is_dir()
+            for p in Path(PYTHON).parent.parent.glob("lib/python*/site-packages")
+        )
+    return _npu_probe
 
 
 def default_run_mode() -> str:
@@ -83,10 +112,9 @@ def make_job(kernel: str, run_mode: str, suffix: str = "", slot: int = 0,
     work_dir = REPO_ROOT / "runs" / f"{name}{suffix}"
     work_dir.mkdir(parents=True, exist_ok=True)
     if via_ir_runner:
-        cmd = (sys.executable, str(IR_RUNNER), str(path), "--run_mode", run_mode)
+        cmd = (PYTHON, str(IR_RUNNER), str(path), "--run_mode", run_mode)
     else:
-        # sys.executable keeps us on the interpreter that has pypto + torch.
-        cmd = (sys.executable, str(path), "--run_mode", run_mode)
+        cmd = (PYTHON, str(path), "--run_mode", run_mode)
     return JobSpec(
         kernel=str(path),
         name=name,
@@ -104,7 +132,9 @@ def execute_job(job: JobSpec, timeout_s: int) -> RunResult:
     if not job.exists:
         return RunResult(job=job, rc=-1, stdout="", error="kernel file not found", seconds=0.0)
 
-    env = os.environ.copy()  # carries the CANN env + PYTHONPATH
+    # cann.environ(), not os.environ: an IDE launching a workflow directly has
+    # never sourced set_env.sh, so pypto would not be importable in the child.
+    env = cann.environ()
     # The kernels read TILE_FWK_DEVICE_ID; give each slot its own device so
     # concurrent runs do not serialise on one.
     env["TILE_FWK_DEVICE_ID"] = str(job.device_id)

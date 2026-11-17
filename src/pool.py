@@ -23,6 +23,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from src.lib import cann  # noqa: E402
 from src.lib.runner import WF_OUT, default_run_mode  # noqa: E402
 from src.tasks.dispatch import make_dispatch  # noqa: E402
 from src.tasks.join import make_join  # noqa: E402
@@ -60,6 +61,9 @@ def validate_pool() -> None:
 
 
 def main() -> int:
+    # Makes an IDE run behave like a run.sh run: run.sh sources
+    # set_env.sh, a direct launch from an IDE does not.
+    cann.apply_to_process()
     kernels = sys.argv[1:] or DEFAULT_KERNELS
     if len(kernels) > POOL:
         print(f"error: {len(kernels)} kernels but PYPTO_POOL={POOL}", file=sys.stderr)
