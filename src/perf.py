@@ -46,7 +46,9 @@ def analyze_perf() -> None:
     connect(prepare.Job, runner.Job)
     connect(runner.Result, collect.Result)
     connect(collect.Perf, analyze.Perf)
-    connect(analyze.Report, "Report")
+    # analyze.Report (the .md file) is left unconnected: this entry point
+    # prints to a terminal and has no viewer to hand a file to.
+    connect(analyze.Summary, "Report")
 
 
 def main() -> int:

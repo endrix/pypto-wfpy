@@ -8,7 +8,7 @@ from pathlib import Path
 
 from src.lib.sim_report import INTERESTING
 from src.lib.records import PerfData
-from wfpy import Port, action, task
+from wfpy import File, Port, action, task
 
 
 @task
@@ -17,15 +17,33 @@ class AnalyzePerf:
 
     class Ports:
         Perf = Port[PerfData](direction="in")
-        Report = Port[str](direction="out")
+        # Two outputs for one analysis: the text a terminal run prints, and the
+        # file a viewer opens. A viewer needs a path on disk, so a summary that
+        # only ever existed as a string would leave it with nothing to show.
+        Summary = Port[str](direction="out")
+        Report = Port[File](direction="out", ext=".md")
 
-    @action(consumes={"Perf": 1}, produces={"Report": 1})
-    def analyze(self, perf: PerfData) -> str:
+    def _skip(self, job, why: str) -> dict:
+        """Report a run with no perf data, still filling both ports.
+
+        The report file is written even here. Both ports are unconditional
+        outputs, so a firing that emitted only the summary would stall the
+        viewer downstream of it.
+        """
+        path = Path(job.work_dir) / "perf_report.md"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            f"# Perf report -- {job.name}\n\nNo performance data: {why}\n", encoding="utf-8"
+        )
+        return {"Summary": f"SKIP  {job.name}: {why}", "Report": str(path)}
+
+    @action(consumes={"Perf": 1}, produces={"Summary": 1, "Report": 1})
+    def analyze(self, perf: PerfData) -> dict:
         job = perf.result.job
         if not perf.result.passed:
-            return f"SKIP  {job.name}: kernel did not pass, no perf data worth reading"
+            return self._skip(job, "kernel did not pass, no perf data worth reading")
         if not perf.found:
-            return f"SKIP  {job.name}: no simulator report under {perf.sim_dir or '(none)'}"
+            return self._skip(job, f"no simulator report under {perf.sim_dir or '(none)'}")
 
         ranked = sorted(perf.pipe_pct.items(), key=lambda kv: kv[1], reverse=True)
         top, top_pct = ranked[0] if ranked else ("?", 0.0)
@@ -63,11 +81,12 @@ class AnalyzePerf:
         report_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
         others = ", ".join(f"{p}={v}%" for p, v in ranked[1:4])
-        return (
+        summary = (
             f"PASS  {job.name:<22} {perf.total_cycles:>8,.0f} cycles  "
             f"limited by {top} ({top_pct}%, {kind})\n"
             f"      next: {others}\n"
             f"      report: {report_path}"
         )
+        return {"Summary": summary, "Report": str(report_path)}
 
 
