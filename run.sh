@@ -7,6 +7,8 @@
 #   ./run.sh perf     [kernel.py ...]   # phase 3: bottleneck from sim counters
 #   ./run.sh repair   <kernel.py>       # phase 4: bounded agent repair loop
 #   ./run.sh repair-softmax [kernel.py] # repair from a file source, ends in a viewer
+#   ./run.sh sim-analyze [kernel.py]    # simulate -> analyse -> visualise (nested)
+#   ./run.sh optimize [kernel.py]       # phase 5: bounded agentic perf search
 #   ./run.sh plan     <workflow.py>     # dump the wfpy graph as JSON
 #   ./run.sh wfpy     run <args...>    # raw wfpy passthrough, wf-out pinned
 #
@@ -60,6 +62,8 @@ case "$cmd" in
     perf)     exec "$PY" "$ROOT/src/perf.py" "$@" ;;
     repair)   exec "$PY" "$ROOT/src/repair.py" "$@" ;;
     repair-softmax) exec "$PY" "$ROOT/src/repair_softmax.py" "$@" ;;
+    sim-analyze)    exec "$PY" "$ROOT/src/sim_analyze.py" "$@" ;;
+    optimize)       exec "$PY" "$ROOT/src/optimize.py" "$@" ;;
     plan)
         wf="${1:?usage: ./run.sh plan <workflow.py>}"
         case "$(basename "$wf")" in
@@ -67,6 +71,8 @@ case "$cmd" in
             perf.py)    name=analyze_perf ;;
             repair.py)          name=repair_kernel ;;
             repair_softmax.py)  name=repair_softmax ;;
+            sim_analyze.py)     name=sim_analyze ;;
+            optimize.py)        name=optimize_kernel ;;
             pool.py)    name=validate_pool ;;
             *)          name=validate_kernel ;;
         esac

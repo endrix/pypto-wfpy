@@ -8,7 +8,12 @@ import os
 from pathlib import Path
 
 BUDGET = int(os.environ.get("PYPTO_REPAIR_BUDGET", "2"))
-TRANSPORT = os.environ.get("PYPTO_REPAIR_TRANSPORT", "mock")
+# acp is the default: these workflows exist to drive a real agent, and a
+# default that quietly does not is how a mock run gets mistaken for a real
+# one. Set PYPTO_REPAIR_TRANSPORT=mock for tests and offline work --
+# the mock reply is deliberately not a usable answer, so the reject path
+# stays exercised. A default run SPENDS TOKENS; the banner says so.
+TRANSPORT = os.environ.get("PYPTO_REPAIR_TRANSPORT", "acp")
 CONNECTOR = os.environ.get("PYPTO_REPAIR_CONNECTOR", "claude")
 IS_ACP = TRANSPORT == "acp"
 # A full-file rewrite takes longer than wfpy's 2-minute default.

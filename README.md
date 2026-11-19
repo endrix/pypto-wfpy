@@ -9,11 +9,20 @@ without touching the others.
 
 | | Workflow | Graph | `run.sh` |
 |---|---|---|---|
-| **Phase 1** | `workflows/validate.py` | `Prepare → RunSim → Gate → VerdictReport` | `validate` |
-| **Phase 1 (pool)** | `workflows/pool.py` | `Dispatch → N×Worker → Join → PoolSummary` | `pool` |
-| **Phase 2** | `workflows/ir.py` | `PrepareIR → RunWithIR → CollectIR → DiffIR` | `ir` |
-| **Phase 3** | `workflows/perf.py` | `Prepare → RunSim → CollectPerf → AnalyzePerf` | `perf` |
-| **Phase 4** | `workflows/repair.py` | `RunKernel → Decide → RepairAgent → ApplyPatch ↺ → RepairReport` | `repair` |
+| **Phase 1** | `src/validate.py` | `Prepare → RunSim → Gate → VerdictReport` | `validate` |
+| **Phase 1 (pool)** | `src/pool.py` | `Dispatch → N×Worker → Join → PoolSummary` | `pool` |
+| **Phase 2** | `src/ir.py` | `PrepareIR → RunWithIR → CollectIR → DiffIR` | `ir` |
+| **Phase 3** | `src/perf.py` | `Prepare → RunSim → CollectPerf → AnalyzePerf` | `perf` |
+| **Phase 4** | `src/repair.py` | `repair_flow` (`RunKernel → Decide → RepairAgent → ApplyPatch ↺ → WriteRepairReport`) | `repair` |
+| **Phase 4 (nested)** | `src/repair_softmax.py` | `KernelSource → repair_flow → RepairReportViewer` | `repair-softmax` |
+| **Phase 5** | `src/sim_analyze.py` | `KernelSource → simulate_flow → analyze_flow → visualize_flow` | `sim-analyze` |
+| **Phase 6** | `src/optimize.py` | `KernelSource → optimize_flow → MarkdownViewer` | `optimize` |
+
+Phases 5 and 6 nest: `optimize_flow` contains `simulate_flow` and `analyze_flow`
+unchanged, wrapped in a bounded agent loop, so the measurement half is shared
+with `sim-analyze` rather than reimplemented. Both agents answer from
+`mock_outputs` by default and cost nothing; set `PYPTO_OPT_TRANSPORT=acp` to
+spend tokens on a real search.
 
 ```
 examples/           four verified PyPTO Tensor-mode kernels (see examples/README.md)
@@ -253,9 +262,22 @@ these kernels directly. The repair agent loads `pypto-precision-debug` (the righ
 one for a numeric mismatch); override with `PYPTO_REPAIR_SKILL`.
 
 They are used **in place**, via `WF_SKILLS_ROOT`, which wfpy treats as its
-highest-priority skill root. A symlink would not work: `_resolve_skill_dir()`
-calls `.resolve()` and then requires the result to still sit under the root, so a
-link pointing outside is skipped silently. `run.sh` exports the root for you.
+highest-priority skill root. `run.sh` exports it for you.
+
+Two wfpy limitations shaped this, both addressed in
+[huawei-csl/wfpy#61](https://github.com/huawei-csl/wfpy/pull/61):
+
+- A symlinked skill directory was skipped silently, because `_resolve_skill_dir()`
+  called `.resolve()` before checking the result still sat under the root. That is
+  how cannbot's `install-helper` installs every skill, so an installed collection
+  was invisible to wfpy while being perfectly visible to Claude Code.
+- `WF_SKILLS_ROOT` held one directory, and a skill name may not contain `/`
+  (`_validate_skill_name`), so a sub-skill such as
+  `pypto-op-perf-tune/perf-analyzer` could not be named at all. It now takes an
+  `os.pathsep` list, and `src/lib/optimize_config.py` adds the `pypto-op-perf-tune`
+  directory as a second root so `perf-analyzer` resolves — probing for the
+  capability first, because on an older wfpy a two-path value would make the whole
+  variable one bogus directory and break the repair loop as a side effect.
 
 ## Notes on wfpy
 

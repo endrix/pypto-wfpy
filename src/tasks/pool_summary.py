@@ -13,7 +13,11 @@ class PoolSummary:
     """Report on the largest snapshot seen, and split pass from fail."""
 
     # State: the join emits a snapshot per arrival, so keep the fullest one.
-    _best: list = []
+    # A tuple, not a list: an annotated field with a default becomes per-actor
+    # state, and a mutable default would be one object shared by every instance.
+    # This code only ever rebinds it, so the bug was latent -- but a single
+    # `.append()` here would have made two pool runs in one process share a list.
+    _best: tuple = ()
 
     class Ports:
         Results = Port[list](direction="in")
@@ -23,7 +27,7 @@ class PoolSummary:
     def summarize(self, results: list) -> str:
         with LOCK:
             if len(results) >= len(self._best):
-                self._best = list(results)
+                self._best = tuple(results)
             best = list(self._best)
 
         lines = []
