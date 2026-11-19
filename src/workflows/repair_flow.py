@@ -49,7 +49,18 @@ from src.tasks.write_repair_report import WriteRepairReport  # noqa: E402
 from wfpy import File, connect, workflow  # noqa: E402
 
 
-@workflow(inputs={"Kernel": str}, outputs={"Report": File, "Verdict": str})
+@workflow(
+    inputs={"Kernel": str},
+    outputs={
+        "Report": File,
+        "Verdict": str,
+        # The four IR stages of the final kernel, tensor -> execute.
+        "TensorGraph": File(ext=".json"),
+        "TileGraph": File(ext=".json"),
+        "BlockGraph": File(ext=".json"),
+        "ExecuteGraph": File(ext=".json"),
+    },
+)
 def repair_flow() -> None:
     """Five actors: run, decide, repair, patch, report."""
     runner = RunKernel(run_mode=default_run_mode())
@@ -72,3 +83,8 @@ def repair_flow() -> None:
 
     connect(writer.Report, "Report")
     connect(writer.Out, "Verdict")
+
+    connect(writer.TensorGraph, "TensorGraph")
+    connect(writer.TileGraph, "TileGraph")
+    connect(writer.BlockGraph, "BlockGraph")
+    connect(writer.ExecuteGraph, "ExecuteGraph")

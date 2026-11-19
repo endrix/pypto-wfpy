@@ -6,10 +6,19 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from src.lib import graph
 from src.lib.records import Outcome
 from src.lib.repair_config import BUDGET
 from src.lib.runner import REPO_ROOT
 from wfpy import File, Port, action, task
+
+# IR level -> the output port that carries that stage's graph dump.
+_STAGE_PORTS = {
+    "TENSOR_GRAPH": "TensorGraph",
+    "TILE_GRAPH": "TileGraph",
+    "BLOCK_GRAPH": "BlockGraph",
+    "EXECUTE_GRAPH": "ExecuteGraph",
+}
 
 
 @task
@@ -31,6 +40,13 @@ class WriteRepairReport:
         Exhausted = Port[Outcome](direction="in")
         Report = Port[File](direction="out", ext=".md")
         Out = Port[str](direction="out")
+        # One compute-graph dump per IR level, for the PyPTO Toolkit to render:
+        # the kernel read tensor -> tile -> block -> execute. The structured
+        # .json dump, not the .tifwkgr text sibling.
+        TensorGraph = Port[File](direction="out", ext=".json")
+        TileGraph = Port[File](direction="out", ext=".json")
+        BlockGraph = Port[File](direction="out", ext=".json")
+        ExecuteGraph = Port[File](direction="out", ext=".json")
 
     def _write(self, outcome: Outcome, repaired: bool) -> dict:
         g = outcome.graph
@@ -87,12 +103,34 @@ class WriteRepairReport:
             f"leaves={g.block_leaves}\n"
             f"      report: {path}"
         )
-        return {"Report": str(path), "Out": summary}
+        return {"Report": str(path), "Out": summary, **self._stages(result.job.work_dir, path)}
 
-    @action(consumes={"Done": 1}, produces={"Report": 1, "Out": 1})
+    def _stages(self, work_dir: str, report: Path) -> dict:
+        """Map each stage output port to a dump file to open.
+
+        Every port must carry a token -- the ports are unconditional outputs.
+        The final attempt is preferred, but a GAVE UP run ends on a kernel that
+        compiled nothing, so when its dir has no dumps we fall back to the most
+        recent attempt that DID lower (a real graph, not markdown). A level that
+        specific run still never reached falls back to the newest level it did
+        reach, and only a repo with no graphs anywhere falls back to the report.
+        """
+        dumps = graph.stage_dumps(work_dir)
+        if not dumps:
+            dumps = graph.stage_dumps(graph.latest_graph_run(REPO_ROOT / "runs"))
+        newest = next(
+            (dumps[lv] for lv in reversed(list(_STAGE_PORTS)) if lv in dumps),
+            str(report),
+        )
+        return {port: dumps.get(lv, newest) for lv, port in _STAGE_PORTS.items()}
+
+    _PRODUCES = {"Report": 1, "Out": 1, "TensorGraph": 1, "TileGraph": 1,
+                 "BlockGraph": 1, "ExecuteGraph": 1}
+
+    @action(consumes={"Done": 1}, produces=_PRODUCES)
     def on_done(self, outcome: Outcome) -> dict:
         return self._write(outcome, repaired=True)
 
-    @action(consumes={"Exhausted": 1}, produces={"Report": 1, "Out": 1})
+    @action(consumes={"Exhausted": 1}, produces=_PRODUCES)
     def on_exhausted(self, outcome: Outcome) -> dict:
         return self._write(outcome, repaired=False)

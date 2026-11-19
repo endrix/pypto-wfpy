@@ -138,6 +138,69 @@ def summarize(run_dir: str | Path) -> GraphSummary:
 DUMP_RE = re.compile(r"^(Before|After)_(\d+)_(.+?)_(.*)\.tifwkgr$")
 
 
+# The pass that dumps each IR level, keyed by the level name a viewer sees.
+# This is the inverse of DUMP_PASSES: those four passes were chosen precisely
+# because one lands on each level transition. The pass name is the reliable
+# signal -- a late pass's dump can still carry an early level in its first
+# `Function` header, so reading the header (as summarize does to *count*
+# levels) would collapse several stages onto one file.
+_LEVEL_PASS = {
+    "TENSOR_GRAPH": "InferTensorFormat",
+    "TILE_GRAPH": "ExpandFunction",
+    "BLOCK_GRAPH": "SubgraphToFunction",
+    "EXECUTE_GRAPH": "CodegenPreproc",
+}
+
+
+# "After_000_InferTensorFormat_row_softmax_kernel_PATH0_hiddenfunc_5.json"
+# -> pass name "InferTensorFormat". The pass names of interest have no
+# underscore, so the non-greedy capture stops at the one before the function.
+_STAGE_DUMP_RE = re.compile(r"^After_\d+_(.+?)_")
+
+
+def stage_dumps(run_dir: str | Path) -> dict[str, str]:
+    """One representative ``.json`` graph dump per IR level, for a graph viewer.
+
+    The compiler writes each pass graph as both a ``.tifwkgr`` text dump (what
+    ``summarize`` parses to *count* levels) and a structured ``.json`` sibling.
+    This returns the JSON to *open* for each level, so a run can be read tensor
+    -> tile -> block -> execute. The level is taken from the dumping pass (see
+    ``_LEVEL_PASS``), and within a pass the largest dump wins -- that is the
+    whole-kernel graph rather than the tiny ``___entry___`` wrapper or a single
+    per-leaf split emitted beside it. Keyed by level name; a level whose pass
+    produced no dump is simply absent from the dict.
+    """
+    pass_level = {name: level for level, name in _LEVEL_PASS.items()}
+    root = Path(run_dir)
+    best: dict[str, tuple[int, Path]] = {}
+    for dump in sorted(root.glob("output/*/computation_graph/**/After_*.json")):
+        name_match = _STAGE_DUMP_RE.match(dump.name)
+        level = pass_level.get(name_match.group(1)) if name_match else None
+        if not level:
+            continue
+        size = dump.stat().st_size
+        if level not in best or size > best[level][0]:
+            best[level] = (size, dump)
+    return {level: str(path) for level, (_, path) in best.items()}
+
+
+def latest_graph_run(runs_root: str | Path) -> str:
+    """The work dir of the most recent run under ``runs_root`` that dumped a graph.
+
+    The repair loop gives each attempt its own work dir, and a GAVE UP run ends
+    on an attempt that compiled nothing -- so that final dir has no dumps. This
+    finds the newest attempt that DID produce a ``computation_graph`` (the last
+    kernel that actually lowered), so the stage viewers show a real graph rather
+    than falling back to the markdown report. Returns "" if none exist.
+    """
+    graphs = sorted(
+        Path(runs_root).glob("*/output/*/computation_graph"),
+        key=lambda p: p.stat().st_mtime,
+    )
+    # computation_graph -> output/<ts> -> output -> runs/<name> (the work dir).
+    return str(graphs[-1].parents[2]) if graphs else ""
+
+
 def level_of(path: Path) -> str:
     """Read the IR level out of a dump's `Function ...` header line."""
     try:

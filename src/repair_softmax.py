@@ -42,6 +42,7 @@ from src.lib.repair_config import BUDGET, CONNECTOR, IS_ACP, REPAIR_SKILL, TRANS
 from src.lib import cann  # noqa: E402
 from src.lib.runner import REPO_ROOT, WF_OUT, default_run_mode  # noqa: E402
 from src.sources.kernel_source import KernelSource  # noqa: E402
+from src.viewers.pypto_graph_viewer import PyPTOGraphViewer  # noqa: E402
 from src.viewers.repair_report_viewer import RepairReportViewer  # noqa: E402
 from src.workflows.repair_flow import repair_flow  # noqa: E402
 from wfpy import File, connect, run, workflow  # noqa: E402
@@ -76,10 +77,18 @@ def repair_softmax() -> None:
     kernel = KernelSource(path=File(KERNEL_PATH))
     flow = repair_flow()
     view = RepairReportViewer()
+    tensor_view = PyPTOGraphViewer()
+    tile_view = PyPTOGraphViewer()
+    block_view = PyPTOGraphViewer()
+    execute_view = PyPTOGraphViewer()
 
     connect(kernel.Out, flow.Kernel)
     connect(flow.Report, view.Report)
     connect(flow.Verdict, "Out")
+    connect(flow.TensorGraph, tensor_view.Graph)
+    connect(flow.TileGraph, tile_view.Graph)
+    connect(flow.BlockGraph, block_view.Graph)
+    connect(flow.ExecuteGraph, execute_view.Graph)
 
 
 def main() -> int:
