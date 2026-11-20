@@ -9,6 +9,7 @@
 #   ./run.sh repair-softmax [kernel.py] # repair from a file source, ends in a viewer
 #   ./run.sh sim-analyze [kernel.py]    # simulate -> analyse -> visualise (nested)
 #   ./run.sh optimize [kernel.py]       # phase 5: bounded agentic perf search
+#   ./run.sh triage [suspect.py] [reference.py]  # localise a bad op (NPU only)
 #   ./run.sh plan     <workflow.py>     # dump the wfpy graph as JSON
 #   ./run.sh wfpy     run <args...>    # raw wfpy passthrough, wf-out pinned
 #
@@ -64,6 +65,7 @@ case "$cmd" in
     repair-softmax) exec "$PY" "$ROOT/src/repair_softmax.py" "$@" ;;
     sim-analyze)    exec "$PY" "$ROOT/src/sim_analyze.py" "$@" ;;
     optimize)       exec "$PY" "$ROOT/src/optimize.py" "$@" ;;
+    triage)         exec "$PY" "$ROOT/src/precision_triage.py" "$@" ;;
     plan)
         wf="${1:?usage: ./run.sh plan <workflow.py>}"
         case "$(basename "$wf")" in
@@ -73,6 +75,7 @@ case "$cmd" in
             repair_softmax.py)  name=repair_softmax ;;
             sim_analyze.py)     name=sim_analyze ;;
             optimize.py)        name=optimize_kernel ;;
+            precision_triage.py) name=precision_triage ;;
             pool.py)    name=validate_pool ;;
             *)          name=validate_kernel ;;
         esac

@@ -122,3 +122,56 @@ class PerfData:
     pipe_cycles: dict = field(default_factory=dict)  # pipe -> avg cycles
     counters: dict = field(default_factory=dict)     # other scalar counters
     tile_ops: dict = field(default_factory=dict)     # op name -> work amount
+
+
+@dataclass(frozen=True)
+class OpDump:
+    """One op's output tensor, as pass verification dumped it."""
+
+    magic: str      # `:opmagic` -- stable across runs, unlike the file name
+    opcode: str     # A_MUL_B, ROWMAX_SINGLE, EXP, ...
+    shape: str
+    dtype: str
+    path: str
+
+
+@dataclass(frozen=True)
+class OpDiff:
+    """How one op's output compares between two runs of the same kernel."""
+
+    magic: str
+    opcode: str
+    shape: str
+    max_abs: float
+    comparable: bool
+    note: str = ""
+
+
+@dataclass(frozen=True)
+class DumpSet:
+    """What one instrumented run produced."""
+
+    job: JobSpec
+    passed: bool
+    verify_dir: str
+    dumps: dict          # magic -> OpDump
+    error: str = ""
+
+    @property
+    def found(self) -> bool:
+        return bool(self.dumps)
+
+
+@dataclass(frozen=True)
+class Divergence:
+    """Where two runs of a kernel first disagree, and the whole comparison."""
+
+    reference: str       # the kernel trusted to be right
+    suspect: str         # the kernel under triage
+    diffs: tuple         # OpDiff, in execution order
+    culprit: Any         # OpDiff or None
+    error: str = ""
+
+    @property
+    def localized(self) -> bool:
+        return self.culprit is not None
