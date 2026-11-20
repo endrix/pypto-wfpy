@@ -31,6 +31,7 @@ DEFAULT_KERNELS = [
     "examples/02_row_softmax.py",
     "examples/03_fused_linear.py",
     "examples/04_layer_norm.py",
+    "examples/05_attention_block.py",
 ]
 
 

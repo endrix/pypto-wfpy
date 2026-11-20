@@ -40,10 +40,17 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 import re
-
-import numpy as np
+from typing import Any
 
 from src.lib.records import OpDiff, OpDump
+
+# numpy is imported where it is used, not here. `wfpy plan` -- which the IDE runs
+# constantly -- imports a workflow module IN-PROCESS, with whatever interpreter
+# is running wfpy. That is often not the project's venv: the IDE was seen
+# planning with `workflow/wfpy/.venv/bin/wfpy`, which has wfpy but no numpy, and
+# a module-level import there turns "show me the graph" into
+# ModuleNotFoundError. Nothing about drawing the graph needs numpy; only
+# comparing tensors does.
 
 # What to add to the jit decorator. `pass_verify_pass_filter: []` skips no pass.
 VERIFY_OPTIONS_SRC = (
@@ -53,15 +60,17 @@ VERIFY_OPTIONS_SRC = (
 
 _JIT_RE = re.compile(r"@pypto\.frontend\.jit\((?P<args>[^)]*)\)")
 
-# The metainfo's dtype names, as numpy types. A dtype not here is readable as
-# bytes but not comparable, so its row is reported as unread rather than equal.
+# The metainfo's dtype names, as numpy type names. Strings rather than numpy
+# objects so this module still imports without numpy; resolved in _values().
+# A dtype not here is readable as bytes but not comparable, so its row is
+# reported as unread rather than as equal.
 DTYPES = {
-    "FP16": np.float16,
-    "FP32": np.float32,
-    "INT32": np.int32,
-    "INT8": np.int8,
-    "UINT8": np.uint8,
-    "INT64": np.int64,
+    "FP16": "float16",
+    "FP32": "float32",
+    "INT32": "int32",
+    "INT8": "int8",
+    "UINT8": "uint8",
+    "INT64": "int64",
 }
 
 # Below this, two runs of the same op agree. The dumps are raw device output, so
@@ -134,14 +143,17 @@ def read_dumps(verify_dir: str | Path) -> dict[str, OpDump]:
     return out
 
 
-def _values(dump: OpDump) -> np.ndarray | None:
-    dtype = DTYPES.get(dump.dtype)
+def _values(dump: OpDump) -> Any:
+    """The dump's bytes as a float32 array, or None if it cannot be read."""
+    import numpy as np  # local: see the note on DTYPES above
+
+    name = DTYPES.get(dump.dtype)
     path = Path(dump.path)
-    if dtype is None or not path.is_file():
+    if name is None or not path.is_file():
         return None
-    raw = np.frombuffer(path.read_bytes(), dtype=dtype)
-    # float32 throughout: fp16 subtraction of two fp16 arrays overflows to inf
-    # where the values are large, which would read as a divergence.
+    raw = np.frombuffer(path.read_bytes(), dtype=getattr(np, name))
+    # float32 throughout: subtracting two fp16 arrays overflows to inf where the
+    # values are large, which would read as a divergence.
     return raw.astype(np.float32)
 
 
@@ -167,6 +179,8 @@ def compare(reference: dict[str, OpDump], suspect: dict[str, OpDump]) -> list[Op
             diffs.append(OpDiff(magic=magic, opcode=dump.opcode, shape=dump.shape,
                                 max_abs=0.0, comparable=False, note=present))
             continue
+
+        import numpy as np  # local: see the note on DTYPES above
 
         a, b = _values(ref), _values(sus)
         if a is None or b is None:
