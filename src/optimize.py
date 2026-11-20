@@ -34,7 +34,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import logging  # noqa: E402
 
-from src.lib import cann  # noqa: E402
+from src.lib import agent_io, cann  # noqa: E402
+from src.lib.run_options import agent_run_options, summary as kept_summary  # noqa: E402
 from src.lib.optimize_config import (  # noqa: E402
     ADVISOR_SKILL,
     BUDGET,
@@ -73,15 +74,17 @@ _requested = _requested_kernel()
 KERNEL_PATH = _requested if Path(_requested).is_absolute() else str(REPO_ROOT / _requested)
 
 
-@workflow(inputs={}, outputs={"Out": str})
+@workflow(inputs={}, outputs={"Out": File(ext=".md")})
 def optimize_kernel() -> None:
     """Three nodes: where the kernel comes from, the search, and the report."""
     kernel = KernelSource(path=File(KERNEL_PATH))
     search = optimize_flow()
-    view = MarkdownViewer()
+    report = MarkdownViewer()
+    advice = MarkdownViewer()
 
     connect(kernel.Out, search.Kernel)
-    connect(search.Report, view.Report)
+    connect(search.Report, report.In)
+    connect(search.Advice, advice.In)
     connect(search.Advice, "Out")
 
 
@@ -98,6 +101,7 @@ def main() -> int:
         logging.getLogger("wfpy").setLevel(logging.INFO)
     print(
         f"[opt] source={KERNEL_PATH}\n"
+        f"[opt] keeping={kept_summary()}\n"
         f"[opt] transport={TRANSPORT} connector={CONNECTOR if IS_ACP else '(n/a)'} "
         f"model={MODEL if IS_ACP else '(n/a)'} budget={BUDGET} min_gain={MIN_GAIN_PCT}% "
         f"advisor_skill={ADVISOR_SKILL or '(none)'} "
@@ -108,9 +112,11 @@ def main() -> int:
         optimize_kernel,
         acp_connector=CONNECTOR if IS_ACP else None,
         out_dir=str(WF_OUT),
+        **agent_run_options(),
     )
-    for line in result["Out"] or ["(no advice)"]:
-        print(line)
+    # "Out" is a .md path, not the text: see the advisor's port declaration.
+    for token in result["Out"] or []:
+        print(agent_io.read_text(token))
     # The search always terminates with a best-so-far, so the exit code reports
     # whether the run produced advice at all, not whether it found a speedup --
     # "no gain" is a legitimate, informative outcome.

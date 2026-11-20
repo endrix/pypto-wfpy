@@ -25,6 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.lib.repair_config import BUDGET, CONNECTOR, IS_ACP, REPAIR_SKILL, TRANSPORT  # noqa: E402
 from src.lib import cann  # noqa: E402
+from src.lib.run_options import agent_run_options, summary as kept_summary  # noqa: E402
 from src.lib.runner import WF_OUT, default_run_mode  # noqa: E402
 from src.workflows.repair_flow import repair_flow  # noqa: E402
 from wfpy import connect, run, workflow  # noqa: E402
@@ -52,6 +53,7 @@ def main() -> int:
         print("usage: repair.py <kernel.py>", file=sys.stderr)
         return 2
     print(
+        f"[repair] keeping={kept_summary()}\n"
         f"[repair] transport={TRANSPORT} budget={BUDGET} mode={default_run_mode()} "
         f"skill={REPAIR_SKILL or '(none)'}",
         file=sys.stderr,
@@ -61,6 +63,7 @@ def main() -> int:
         inputs={"Kernel": sys.argv[1]},
         acp_connector=CONNECTOR if IS_ACP else None,
         out_dir=str(WF_OUT),
+        **agent_run_options(),
     )
     lines = result["Out"] or ["(no output)"]
     for line in lines:

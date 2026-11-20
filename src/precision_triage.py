@@ -40,7 +40,8 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.lib import cann  # noqa: E402
+from src.lib import agent_io, cann  # noqa: E402
+from src.lib.run_options import agent_run_options, summary as kept_summary  # noqa: E402
 from src.lib.runner import REPO_ROOT, WF_OUT  # noqa: E402
 from src.lib.triage_config import (  # noqa: E402
     ANALYST_SKILL,
@@ -86,17 +87,23 @@ SUSPECT = _abs(_requested("PYPTO_SUSPECT", 1, DEFAULT_SUSPECT))
 REFERENCE = _abs(_requested("PYPTO_REFERENCE", 2, DEFAULT_REFERENCE))
 
 
-@workflow(inputs={}, outputs={"Out": str})
+@workflow(inputs={}, outputs={"Out": File(ext=".md")})
 def precision_triage() -> None:
     """Four nodes: the two kernels, the triage, and somewhere to read it."""
     suspect = KernelSource(path=File(SUSPECT))
     reference = KernelSource(path=File(REFERENCE))
     triage = triage_flow()
-    view = MarkdownViewer()
+    table = MarkdownViewer()
+    analysis = MarkdownViewer()
 
     connect(suspect.Out, triage.Suspect)
     connect(reference.Out, triage.Reference)
-    connect(triage.Report, view.Report)
+
+    # Two viewers, one per document: the op table is evidence, the analysis is
+    # the reading of it, and an output port broadcasts, so "Out" gets the
+    # analysis as well for the terminal.
+    connect(triage.Report, table.In)
+    connect(triage.Analysis, analysis.In)
     connect(triage.Analysis, "Out")
 
 
@@ -113,6 +120,7 @@ def main() -> int:
     print(
         f"[triage] suspect={SUSPECT}\n"
         f"[triage] reference={REFERENCE}\n"
+        f"[triage] keeping={kept_summary()}\n"
         f"[triage] mode={RUN_MODE} (pinned) transport={TRANSPORT} "
         f"model={MODEL if IS_ACP else '(n/a)'} skill={ANALYST_SKILL or '(none)'}",
         file=sys.stderr,
@@ -121,9 +129,12 @@ def main() -> int:
         precision_triage,
         acp_connector=CONNECTOR if IS_ACP else None,
         out_dir=str(WF_OUT),
+        **agent_run_options(),
     )
-    for line in result["Out"] or ["(no analysis)"]:
-        print(line)
+    # "Out" is a .md path now, not the text: the analyst's port declares a
+    # format, so wfpy wrote the reply to a file and passed that on.
+    for token in result["Out"] or []:
+        print(agent_io.read_text(token))
     return 0 if result["Out"] else 1
 
 
