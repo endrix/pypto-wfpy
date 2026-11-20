@@ -13,7 +13,7 @@ from src.lib.optimize_config import (
     TIMEOUT_MS,
     TRANSPORT,
 )
-from wfpy import Port, agent
+from wfpy import File, Port, agent
 
 
 @agent(
@@ -43,4 +43,4 @@ class PerfAdvisor:
 
     class Ports:
         Analysis = Port[str](direction="in")
-        Advice = Port[str](direction="out")
+        Advice = Port[File](direction="out", ext=".md")

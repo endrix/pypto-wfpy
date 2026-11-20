@@ -167,6 +167,10 @@ Rules:
 - Honour the tile constraints stated under "constraints" below if any are given:
   a tiling the compiler rejects scores as infinitely slow.
 - Markdown, no fences around the whole reply.
+
+Output format: **markdown**. The skill this agent loads does not state an output
+format, so the format is stated here. Reply with markdown only -- no JSON
+envelope of your own, and no fence wrapping the whole reply.
 """
 
 
@@ -176,7 +180,6 @@ APPLIER_PROMPT = """You are applying ONE already-decided change to a PyPTO
 The directive below names the catalogue item and the edit. Make exactly that
 edit and nothing else.
 
-Reply with the COMPLETE rewritten Python file and nothing else. No prose, no fences.
 
 Rules:
 - Do not weaken the test: leave the torch reference, the tolerances and every
@@ -188,6 +191,20 @@ Rules:
   unchanged. Do not invent a change of your own.
 - Record what you did as a comment at the edit site, naming the item id.
 - `pypto.mean` does not exist in this version; use `pypto.sum` over the axis.
+
+Output format: **a single JSON object** and nothing else. The skill this agent
+loads does not state an output format, so the format is stated here. No prose
+outside the object, and no fence around it.
+
+    {
+      "item": "the catalogue id you applied, e.g. F-9",
+      "kernel": "the complete rewritten Python file"
+    }
+
+Put the whole file in `kernel` as one JSON string, newlines escaped as \n. The
+structure is the contract: a reply asked for as "the file and nothing else"
+comes back fenced often enough that every reader grew its own fence-stripping
+branch.
 """
 
 
@@ -197,7 +214,6 @@ performance and the compiler REJECTED it. Fix the rejection.
 This is not a performance task. The previous edit was a deliberate optimization;
 keep its intent and make it legal.
 
-Reply with the COMPLETE corrected Python file and nothing else. No prose, no fences.
 
 Rules:
 - `INVALID_TILE` means the tile shapes violate a hardware constraint - an L0A /
@@ -209,6 +225,20 @@ Rules:
   as they are.
 - Say what the constraint was in a comment at the edit site, so the next round
   does not repeat it.
+
+Output format: **a single JSON object** and nothing else. The skill this agent
+loads does not state an output format, so the format is stated here. No prose
+outside the object, and no fence around it.
+
+    {
+      "constraint": "the hardware constraint that was violated",
+      "kernel": "the complete corrected Python file"
+    }
+
+Put the whole file in `kernel` as one JSON string, newlines escaped as \n. The
+structure is the contract: a reply asked for as "the file and nothing else"
+comes back fenced often enough that every reader grew its own fence-stripping
+branch.
 """
 
 
@@ -228,6 +258,10 @@ Rules:
   Do not express them as wall-clock time or as a speedup.
 - A low fleet utilization with few cores used is an occupancy problem, not a
   memory-bandwidth problem, however high the MTE_IN percentage looks.
+
+Output format: **markdown**. The skill this agent loads does not state an output
+format, so the format is stated here. Reply with markdown only -- no JSON
+envelope of your own, and no fence wrapping the whole reply.
 """
 
 OPTIMIZER_PROMPT = """You are making a PyPTO (Ascend NPU) Tensor-mode kernel

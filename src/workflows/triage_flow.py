@@ -37,7 +37,8 @@ from wfpy import File, connect, workflow  # noqa: E402
 
 @workflow(
     inputs={"Suspect": str, "Reference": str},
-    outputs={"Report": File(ext=".md"), "Analysis": str, "Verdict": str},
+    outputs={"Report": File(ext=".md"), "Analysis": File(ext=".md"),
+             "Verdict": str},
 )
 def triage_flow() -> None:
     """Two instrumented runs, an exact comparison, and one explanation."""

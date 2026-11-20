@@ -12,7 +12,7 @@ from src.lib.optimize_config import (
     TIMEOUT_MS,
     TRANSPORT,
 )
-from wfpy import Port, agent
+from wfpy import File, Port, agent
 
 
 @agent(
@@ -26,11 +26,13 @@ from wfpy import Port, agent
     # again would re-open the analysis the gate just finished checking, and the
     # skill's own rule is that analysis precedes editing, not that it repeats.
     skill=None,
-    mock_outputs={"Candidate": "# mock transport: no edit was applied\n"},
+    mock_outputs={"Candidate": '{"item": "F-0", "kernel": "# mock transport: no edit was applied\\n"}'},
 )
 class TuneApplier:
     """One decided edit, one complete file out. Not trusted: it is measured."""
 
     class Ports:
         Directive = Port[str](direction="in")
-        Candidate = Port[str](direction="out")
+        # .json, not .py: the item id and the source travel together, and
+        # wfpy serialises a returned dict for a .json port itself.
+        Candidate = Port[File](direction="out", ext=".json")

@@ -13,7 +13,7 @@ from src.lib.optimize_config import (
     TIMEOUT_MS,
     TRANSPORT,
 )
-from wfpy import Port, agent
+from wfpy import File, Port, agent
 
 
 @agent(
@@ -26,7 +26,7 @@ from wfpy import Port, agent
     # DEBUG_GUIDEBOOK: L0A/L0B/L0C/L1 capacity, alignment, missing tile shape,
     # `set_cube_tile_shapes` validation. Exactly the INVALID_TILE class.
     skill=DOCTOR_SKILL,
-    mock_outputs={"Fixed": "# mock transport: no diagnosis was attempted\n"},
+    mock_outputs={"Fixed": '{"constraint": "mock", "kernel": "# mock transport: no diagnosis was attempted\\n"}'},
 )
 class TileDoctor:
     """Make a rejected optimization legal instead of discarding it.
@@ -40,4 +40,4 @@ class TileDoctor:
 
     class Ports:
         Failure = Port[str](direction="in")
-        Fixed = Port[str](direction="out")
+        Fixed = Port[File](direction="out", ext=".json")

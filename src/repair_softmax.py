@@ -40,6 +40,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.lib.repair_config import BUDGET, CONNECTOR, IS_ACP, REPAIR_SKILL, TRANSPORT  # noqa: E402
 from src.lib import cann  # noqa: E402
+from src.lib.run_options import agent_run_options, summary as kept_summary  # noqa: E402
 from src.lib.runner import REPO_ROOT, WF_OUT, default_run_mode  # noqa: E402
 from src.sources.kernel_source import KernelSource  # noqa: E402
 from src.viewers.pypto_graph_viewer import PyPTOGraphViewer  # noqa: E402
@@ -97,6 +98,7 @@ def main() -> int:
     cann.apply_to_process()
     print(
         f"[repair] source={KERNEL_PATH}\n"
+        f"[repair] keeping={kept_summary()}\n"
         f"[repair] transport={TRANSPORT} budget={BUDGET} mode={default_run_mode()} "
         f"skill={REPAIR_SKILL or '(none)'}",
         file=sys.stderr,
@@ -105,6 +107,7 @@ def main() -> int:
         repair_softmax,
         acp_connector=CONNECTOR if IS_ACP else None,
         out_dir=str(WF_OUT),
+        **agent_run_options(),
     )
     lines = result["Out"] or ["(no output)"]
     for line in lines:

@@ -45,6 +45,6 @@ def visualize_flow() -> None:
     cores = MarkdownViewer()
     swim = SwimlaneViewer()
 
-    connect("PerfReport", pipes.Report)
-    connect("BubbleReport", cores.Report)
+    connect("PerfReport", pipes.In)
+    connect("BubbleReport", cores.In)
     connect("Swimlane", swim.Swimlane)

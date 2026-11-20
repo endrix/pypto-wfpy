@@ -7,8 +7,9 @@ from __future__ import annotations
 from pathlib import Path
 import sys
 
+from src.lib.agent_io import read_text
 from src.lib.optimize_config import REQUIRED_ARTIFACTS
-from wfpy import Port, action, task
+from wfpy import File, Port, action, task
 
 
 @task
@@ -38,7 +39,7 @@ class ArtifactGate:
     _n: int = 0
 
     class Ports:
-        Plan = Port[str](direction="in")
+        Plan = Port[File](direction="in")
         Source = Port[str](direction="in")
         Directive = Port[str](direction="out")
 
@@ -58,6 +59,9 @@ class ArtifactGate:
     @action(consumes={"Plan": 1, "Source": 1}, produces={"Directive": 1})
     def check(self, plan: str, source: str) -> str:
         self._n += 1
+        # The planner's port is .md, so this is a path to the markdown, not the
+        # markdown itself.
+        plan = read_text(plan)
         missing = self._missing(plan)
         verdict = (
             "PLAN INCOMPLETE -- missing: " + "; ".join(missing)

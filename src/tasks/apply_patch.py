@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from src.lib.agent_io import read_json
 from src.lib.runner import REPO_ROOT
 from wfpy import Port, action, task
 
@@ -26,9 +27,11 @@ class ApplyPatch:
         out_dir = REPO_ROOT / "runs" / "repaired"
         out_dir.mkdir(parents=True, exist_ok=True)
         target = out_dir / f"attempt{self._n}.py"
-        text = patched.strip()
-        if text.startswith("```"):  # strip a fence the agent added despite the prompt
-            lines = text.splitlines()
-            text = "\n".join(lines[1 : -1 if lines[-1].strip() == "```" else len(lines)])
-        target.write_text(text + "\n", encoding="utf-8")
+        # The agent's port is .json, so the reply is an object with the source
+        # in a field. read_json raises on a malformed one rather than writing a
+        # half-empty file: an empty kernel reads downstream as "it ran and
+        # printed nothing", which is how an empty payload once passed for a
+        # successful turn.
+        reply = read_json(patched, required=("kernel",))
+        target.write_text(reply["kernel"].rstrip("\n") + "\n", encoding="utf-8")
         return str(target)

@@ -78,7 +78,7 @@ from wfpy import File, connect, workflow  # noqa: E402
 
 @workflow(
     inputs={"Kernel": str},
-    outputs={"Report": File(ext=".md"), "Advice": str},
+    outputs={"Report": File(ext=".md"), "Advice": File(ext=".md")},
 )
 def optimize_flow() -> None:
     """Measure, decide, edit, re-measure -- with a gate and a doctor."""

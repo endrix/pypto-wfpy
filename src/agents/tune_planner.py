@@ -13,7 +13,7 @@ from src.lib.optimize_config import (
     TIMEOUT_MS,
     TRANSPORT,
 )
-from wfpy import Port, agent
+from wfpy import File, Port, agent
 
 
 @agent(
@@ -48,4 +48,4 @@ class TunePlanner:
 
     class Ports:
         Request = Port[str](direction="in")
-        Plan = Port[str](direction="out")
+        Plan = Port[File](direction="out", ext=".md")

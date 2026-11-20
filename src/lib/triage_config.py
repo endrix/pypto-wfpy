@@ -49,4 +49,8 @@ Rules:
 - Do not propose a tolerance change. The fault is in the kernel.
 - Do not re-derive the localisation or second-guess it; the ops before the named
   one are bit-identical.
+
+Output format: **markdown**. The skill this agent loads does not state an output
+format, so the format is stated here. Reply with markdown only -- no JSON
+envelope of your own, and no fence wrapping the whole reply.
 """

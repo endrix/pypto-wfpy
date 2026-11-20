@@ -13,7 +13,7 @@ from src.lib.triage_config import (
     TIMEOUT_MS,
     TRANSPORT,
 )
-from wfpy import Port, agent
+from wfpy import File, Port, agent
 
 
 @agent(
@@ -43,4 +43,7 @@ class PrecisionAnalyst:
 
     class Ports:
         Brief = Port[str](direction="in")
-        Analysis = Port[str](direction="out")
+        # .md, so the reply is a document a viewer can render. For a
+        # Port[File] wfpy writes it to <actor>__Analysis__<n>.md and
+        # passes that path on, not the text.
+        Analysis = Port[File](direction="out", ext=".md")
