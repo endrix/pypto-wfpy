@@ -10,6 +10,7 @@
 #   ./run.sh sim-analyze [kernel.py]    # simulate -> analyse -> visualise (nested)
 #   ./run.sh optimize [kernel.py]       # phase 5: bounded agentic perf search
 #   ./run.sh triage [suspect.py] [reference.py]  # localise a bad op (NPU only)
+#   ./run.sh profile [kernel.py]        # measured device profile (NPU only)
 #   ./run.sh plan     <workflow.py>     # dump the wfpy graph as JSON
 #   ./run.sh wfpy     run <args...>    # raw wfpy passthrough, wf-out pinned
 #
@@ -66,6 +67,7 @@ case "$cmd" in
     sim-analyze)    exec "$PY" "$ROOT/src/sim_analyze.py" "$@" ;;
     optimize)       exec "$PY" "$ROOT/src/optimize.py" "$@" ;;
     triage)         exec "$PY" "$ROOT/src/precision_triage.py" "$@" ;;
+    profile)        exec "$PY" "$ROOT/src/profile_kernel.py" "$@" ;;
     plan)
         wf="${1:?usage: ./run.sh plan <workflow.py>}"
         case "$(basename "$wf")" in
@@ -76,6 +78,7 @@ case "$cmd" in
             sim_analyze.py)     name=sim_analyze ;;
             optimize.py)        name=optimize_kernel ;;
             precision_triage.py) name=precision_triage ;;
+            profile_kernel.py)  name=profile_kernel ;;
             pool.py)    name=validate_pool ;;
             *)          name=validate_kernel ;;
         esac

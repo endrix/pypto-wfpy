@@ -175,3 +175,27 @@ class Divergence:
     @property
     def localized(self) -> bool:
         return self.culprit is not None
+
+
+@dataclass(frozen=True)
+class Measurement:
+    """One device run made with debug_options, and what it left behind.
+
+    Named Measurement and not ProfileRun on purpose. wfpy decides whether a port
+    carries a resource by, in the end, a substring match on the type's name
+    (`_is_resource_type`: `"resource" in type_str or "file" in type_str`), and
+    "pro-FILE-run" contains "file". A ProfileRun token was therefore materialised
+    to disk at the sub-workflow boundary and arrived downstream as a path string,
+    failing with `'str' object has no attribute 'job'`. Avoid "file" and
+    "resource" as substrings of any token type's name.
+    """
+
+    job: JobSpec
+    passed: bool
+    profile_dir: str          # the output_* dir that actually holds the artifacts
+    workspace_kb: int         # the S-20 hint from stdout, 0 if absent
+    error: str = ""
+
+    @property
+    def found(self) -> bool:
+        return bool(self.profile_dir)
