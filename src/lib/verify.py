@@ -39,8 +39,9 @@ from __future__ import annotations
 
 import csv
 from pathlib import Path
-import re
 from typing import Any
+
+from src.lib.jit_options import add_option
 
 from src.lib.records import OpDiff, OpDump
 
@@ -51,14 +52,6 @@ from src.lib.records import OpDiff, OpDump
 # a module-level import there turns "show me the graph" into
 # ModuleNotFoundError. Nothing about drawing the graph needs numpy; only
 # comparing tensors does.
-
-# What to add to the jit decorator. `pass_verify_pass_filter: []` skips no pass.
-VERIFY_OPTIONS_SRC = (
-    'verify_options = {"enable_pass_verify": True, "pass_verify_save_tensor": True,\n'
-    '                  "pass_verify_pass_filter": []}'
-)
-
-_JIT_RE = re.compile(r"@pypto\.frontend\.jit\((?P<args>[^)]*)\)")
 
 # The metainfo's dtype names, as numpy type names. Strings rather than numpy
 # objects so this module still imports without numpy; resolved in _values().
@@ -81,26 +74,16 @@ AGREE_ATOL = 1e-3
 def instrument(source: str) -> str:
     """Add `verify_options` to a kernel's jit decorator.
 
-    One edit, and generic: it does not touch `main()` or the kernel body. Raises
-    if the file has no jit decorator, rather than silently returning a copy that
-    dumps nothing -- a run that produces no verify directory would otherwise look
-    like a kernel with no divergence.
+    One edit, and generic: it does not touch `main()` or the kernel body. See
+    `src.lib.jit_options` for why it is a decorator parameter and why this writes
+    a copy.
     """
-    match = _JIT_RE.search(source)
-    if match is None:
-        raise ValueError("no @pypto.frontend.jit(...) decorator found")
-    if "verify_options" in match.group("args"):
-        return source  # already instrumented
-
-    args = match.group("args").strip()
-    joined = f"{args}, verify_options=verify_options" if args else "verify_options=verify_options"
-    decorator = f"@pypto.frontend.jit({joined})"
-    return (
-        source[: match.start()]
-        + VERIFY_OPTIONS_SRC
-        + "\n\n\n"
-        + decorator
-        + source[match.end():]
+    return add_option(
+        source,
+        "verify_options",
+        '{"enable_pass_verify": True, "pass_verify_save_tensor": True,\n'
+        '                  "pass_verify_pass_filter": []}',
+        note="Pass verification: dump every op's output tensor.",
     )
 
 
