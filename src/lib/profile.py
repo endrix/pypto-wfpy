@@ -37,12 +37,11 @@ import subprocess
 
 from src.lib import cann
 from src.lib.runner import PYTHON
+from src.lib.skill_paths import ops_root
 
 # Where the tuning skill keeps the readers for this data. Used rather than
 # reimplemented: they already know the swimlane's merge keys and hash order.
-SCRIPTS = Path(
-    "/home/endrix/git/pypto/cannbot-skills/ops/pypto-op-perf-tune/tune-swimlane/scripts"
-)
+SCRIPTS = ops_root() / "pypto-op-perf-tune/tune-swimlane/scripts"
 SWIMLANE_SCRIPT = SCRIPTS / "analyze_swimlane.py"
 CORE_USAGE_SCRIPT = SCRIPTS / "analyze_core_usage.py"
 

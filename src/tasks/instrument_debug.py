@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from tempfile import mkdtemp
 
 from src.lib import profile
 from src.lib.jit_options import add_option
@@ -33,7 +34,7 @@ class InstrumentDebug:
         source_path = Path(str(kernel))
         out_dir = REPO_ROOT / "runs" / "profile" / self.label
         out_dir.mkdir(parents=True, exist_ok=True)
-        target = out_dir / source_path.name
+        target = Path(mkdtemp(prefix=f"{source_path.stem}-", dir=out_dir)) / source_path.name
         target.write_text(
             add_option(
                 source_path.read_text(encoding="utf-8"),

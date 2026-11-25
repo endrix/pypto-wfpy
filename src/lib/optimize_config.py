@@ -7,12 +7,13 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from src.lib.skill_paths import ops_root
+
 BUDGET = int(os.environ.get("PYPTO_OPT_BUDGET", "2"))
-# acp is the default: these workflows exist to drive a real agent, and a
-# default that quietly does not is how a mock run gets mistaken for a real
-# one. Set PYPTO_OPT_TRANSPORT=mock for tests and offline work --
-# the mock reply is deliberately not a usable answer, so the reject path
-# stays exercised. A default run SPENDS TOKENS; the banner says so.
+# The real transport, always. There is no mock: every agent here is
+# answered by a model, and a run that did not call one is not a run of
+# this workflow. PYPTO_OPT_TRANSPORT can name another ACP-capable
+# transport, but not a stand-in.
 TRANSPORT = os.environ.get("PYPTO_OPT_TRANSPORT", "acp")
 CONNECTOR = os.environ.get("PYPTO_OPT_CONNECTOR", "claude")
 IS_ACP = TRANSPORT == "acp"
@@ -28,9 +29,11 @@ TIMEOUT_MS = int(os.environ.get("PYPTO_OPT_TIMEOUT_MS", "600000"))
 MODEL = os.environ.get("PYPTO_OPT_MODEL", "opus")
 
 # A candidate must beat the incumbent by more than this to be adopted. The
-# simulator is deterministic, so this is not noise margin -- it is a floor on
-# what counts as worth keeping a rewrite for.
-MIN_GAIN_PCT = float(os.environ.get("PYPTO_OPT_MIN_GAIN_PCT", "2.0"))
+# simulator is deterministic, so this is not a noise margin -- it is a floor on
+# what counts as worth keeping a rewrite for. It was 2.0, which rejected a
+# measured +0.9% on 03_fused_linear: a real improvement thrown away by a
+# threshold picked before anything had been measured.
+MIN_GAIN_PCT = float(os.environ.get("PYPTO_OPT_MIN_GAIN_PCT", "0.5"))
 
 # A candidate the compiler REJECTS is a different event from a candidate that is
 # merely slower, and it gets its own budget. Without one, a doctor that keeps
@@ -38,8 +41,7 @@ MIN_GAIN_PCT = float(os.environ.get("PYPTO_OPT_MIN_GAIN_PCT", "2.0"))
 # backpressure, so every cycle needs a counter that can only go up.
 REPAIR_BUDGET = int(os.environ.get("PYPTO_OPT_REPAIR_BUDGET", "2"))
 
-SKILLS_ROOT = Path(os.environ.get("WF_SKILLS_ROOT", "/home/endrix/git/pypto/cannbot-skills/ops")
-                   .split(os.pathsep)[0])
+SKILLS_ROOT = ops_root()
 
 
 def _multi_root_wfpy() -> bool:
@@ -178,7 +180,7 @@ APPLIER_PROMPT = """You are applying ONE already-decided change to a PyPTO
 (Ascend NPU) Tensor-mode kernel.
 
 The directive below names the catalogue item and the edit. Make exactly that
-edit and nothing else.
+edit and nothing else. Preserve public evaluator entry points, including kda_run when present.
 
 
 Rules:
@@ -198,6 +200,7 @@ outside the object, and no fence around it.
 
     {
       "item": "the catalogue id you applied, e.g. F-9",
+      "change": "one sentence naming the exact edit or why it was skipped",
       "kernel": "the complete rewritten Python file"
     }
 
@@ -209,7 +212,9 @@ branch.
 
 
 DOCTOR_PROMPT = """A PyPTO (Ascend NPU) Tensor-mode kernel was rewritten for
-performance and the compiler REJECTED it. Fix the rejection.
+performance or submitted as a baseline. Diagnose the recorded evaluation failure.
+For a timeout, read the phase, last fixture, partial reports and logs. Preserve
+the evaluator interface and fixtures. Repair the cause supported by that evidence.
 
 This is not a performance task. The previous edit was a deliberate optimization;
 keep its intent and make it legal.
@@ -253,6 +258,7 @@ times, and the tasks that waited longest to be scheduled. Write a short analysis
 3. Name the one lever most likely to move it, and the metric that would confirm it.
 
 Rules:
+- When measurements are missing, identify the failed phase and the evidence needed to proceed.
 - Markdown, under 300 words, no fences. Do not restate the tables.
 - These are cost-model estimates on a CPU, not measurements on hardware.
   Do not express them as wall-clock time or as a speedup.

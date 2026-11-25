@@ -4,6 +4,9 @@
 
 from __future__ import annotations
 
+from hashlib import sha256
+from pathlib import Path
+
 import sys
 
 from src.lib import profile
@@ -40,8 +43,9 @@ class RunProfile:
 
     @action(consumes={"Instrumented": 1}, produces={"Profile": 1})
     def run(self, instrumented: str) -> Measurement:
-        job = make_job(instrumented, RUN_MODE, suffix=f"_profile_{self.label}",
-                       slot=self.slot)
+        job = make_job(instrumented, RUN_MODE, slot=self.slot,
+                       work_dir=Path(instrumented).parent / "measurement")
+        digest = sha256(Path(instrumented).read_bytes()).hexdigest()
         result = execute_job(job, self.timeout_s)
         profile_dir = profile.find_profile_dir(job.work_dir)
         workspace_kb = profile.recommended_workspace_kb(result.stdout)
@@ -53,4 +57,4 @@ class RunProfile:
             file=sys.stderr,
         )
         return Measurement(job=job, passed=result.passed, profile_dir=profile_dir,
-                          workspace_kb=workspace_kb, error=result.error)
+                          workspace_kb=workspace_kb, error=result.error, instrumented_sha256=digest)

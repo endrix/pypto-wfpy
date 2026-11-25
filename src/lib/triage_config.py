@@ -5,8 +5,13 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 
+from src.lib.skill_paths import ops_root
+
+# The real transport, always. There is no mock: every agent here is
+# answered by a model, and a run that did not call one is not a run of
+# this workflow. PYPTO_TRIAGE_TRANSPORT can name another ACP-capable
+# transport, but not a stand-in.
 TRANSPORT = os.environ.get("PYPTO_TRIAGE_TRANSPORT", "acp")
 CONNECTOR = os.environ.get("PYPTO_TRIAGE_CONNECTOR", "claude")
 IS_ACP = TRANSPORT == "acp"
@@ -17,10 +22,7 @@ TIMEOUT_MS = int(os.environ.get("PYPTO_TRIAGE_TIMEOUT_MS", "600000"))
 # sim the run dies in setup_verify_data with RT_MEMCPY_FAILED. Not a preference.
 RUN_MODE = "npu"
 
-SKILLS_ROOT = Path(
-    os.environ.get("WF_SKILLS_ROOT", "/home/endrix/git/pypto/cannbot-skills/ops")
-    .split(os.pathsep)[0]
-)
+SKILLS_ROOT = ops_root()
 SKILL_NAME = os.environ.get("PYPTO_TRIAGE_SKILL", "pypto-precision-debug")
 ANALYST_SKILL = SKILL_NAME if (SKILLS_ROOT / SKILL_NAME / "SKILL.md").is_file() else None
 

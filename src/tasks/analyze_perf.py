@@ -41,7 +41,7 @@ class AnalyzePerf:
     def analyze(self, perf: PerfData) -> dict:
         job = perf.result.job
         if not perf.result.passed:
-            return self._skip(job, "kernel did not pass, no perf data worth reading")
+            return self._skip(job, perf.result.error or "kernel did not pass")
         if not perf.found:
             return self._skip(job, f"no simulator report under {perf.sim_dir or '(none)'}")
 
@@ -57,13 +57,17 @@ class AnalyzePerf:
             f"- kernel: `{job.kernel}`",
             f"- sim dir: `{perf.sim_dir}`",
             f"- total cycles: {perf.total_cycles:,.0f}",
-            f"- **limiting pipe: {top} at {top_pct}% -> {kind}**",
+            f"- **limiting pipe: {top} at {top_pct}% -> {kind}**" if ranked else "- Pipe counters unavailable.",
             "",
             "## Pipe usage",
             "",
             "| pipe | avg cycles | % of total |",
             "|---|---|---|",
         ]
+        if perf.component_cycles:
+            lines[5:5] = ["- fixture: (128,64), seed=0, diagonal=1, cumulative gates",
+                          "- counters and trace: highest-cycle component",
+                          *(f"- {cost:,.0f} cycles: `{path}`" for path, cost in perf.component_cycles.items())]
         for pipe, pct in ranked:
             lines.append(f"| {pipe} | {perf.pipe_cycles.get(pipe, 0):,.0f} | {pct}% |")
 
@@ -81,9 +85,10 @@ class AnalyzePerf:
         report_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
         others = ", ".join(f"{p}={v}%" for p, v in ranked[1:4])
+        constraint = f"limited by {top} ({top_pct}%, {kind})" if ranked else "pipe counters unavailable"
         summary = (
             f"PASS  {job.name:<22} {perf.total_cycles:>8,.0f} cycles  "
-            f"limited by {top} ({top_pct}%, {kind})\n"
+            f"{constraint}\n"
             f"      next: {others}\n"
             f"      report: {report_path}"
         )

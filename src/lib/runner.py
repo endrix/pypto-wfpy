@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import signal
 import subprocess
 import sys
 import threading
@@ -100,7 +101,8 @@ def first_error(stdout: str, stderr: str) -> str:
 
 
 def make_job(kernel: str, run_mode: str, suffix: str = "", slot: int = 0,
-             via_ir_runner: bool = False, extra_args: tuple[str, ...] = ()) -> JobSpec:
+             via_ir_runner: bool = False, extra_args: tuple[str, ...] = (),
+             work_dir: Path | None = None) -> JobSpec:
     """Resolve a kernel path into a JobSpec with its own work dir."""
     # str() rather than Path(kernel) directly: a @source emits its File
     # parameter as the dataclass, not as a resolved path string, so a kernel can
@@ -109,7 +111,7 @@ def make_job(kernel: str, run_mode: str, suffix: str = "", slot: int = 0,
     if not path.is_absolute():
         path = REPO_ROOT / path
     name = path.stem
-    work_dir = REPO_ROOT / "runs" / f"{name}{suffix}"
+    work_dir = work_dir or REPO_ROOT / "runs" / f"{name}{suffix}"
     work_dir.mkdir(parents=True, exist_ok=True)
     if via_ir_runner:
         cmd = (PYTHON, str(IR_RUNNER), str(path), "--run_mode", run_mode)
@@ -139,23 +141,44 @@ def execute_job(job: JobSpec, timeout_s: int) -> RunResult:
     # concurrent runs do not serialise on one.
     env["TILE_FWK_DEVICE_ID"] = str(job.device_id)
 
-    started = time.time()
-    try:
-        proc = subprocess.run(
-            list(job.cmd), cwd=job.work_dir, env=env,
-            capture_output=True, text=True, timeout=timeout_s,
-        )
-        rc, stdout = proc.returncode, proc.stdout
-        if rc != 0:
-            error = first_error(stdout, proc.stderr)
-        elif "PASS:" not in stdout:
-            # Exit 0 is not enough on its own: a file that runs but never reaches
-            # its self-check would otherwise be reported as failing with no reason.
-            error = "exited 0 but printed no PASS: line"
-        else:
-            error = ""
-    except subprocess.TimeoutExpired:
-        rc, stdout, error = -2, "", f"timeout after {timeout_s}s"
+    started = time.monotonic()
+    timed_out = False
+    # KDA cases have a private invocation directory. Persist both streams while
+    # the job runs so a deadline or interrupted IDE run keeps the last fixture.
+    if job.phase:
+        directory = Path(job.work_dir)
+        stdout_path, stderr_path = directory / "stdout.log", directory / "stderr.log"
+        with stdout_path.open("w") as out, stderr_path.open("w") as err:
+            with subprocess.Popen(job.cmd, cwd=directory, env=env, stdout=out, stderr=err,
+                                  start_new_session=True) as proc:
+                try:
+                    rc = proc.wait(timeout=timeout_s)
+                except subprocess.TimeoutExpired:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                    proc.wait()
+                    rc, timed_out = -2, True
+        stdout = stdout_path.read_text(errors="replace")
+        stderr = stderr_path.read_text(errors="replace")
+    else:
+        try:
+            proc = subprocess.run(job.cmd, cwd=job.work_dir, env=env, capture_output=True,
+                                  text=True, timeout=timeout_s)
+            rc, stdout, stderr = proc.returncode, proc.stdout, proc.stderr
+        except subprocess.TimeoutExpired as exc:
+            rc, timed_out = -2, True
+            stdout = (exc.stdout or b"").decode(errors="replace")
+            stderr = (exc.stderr or b"").decode(errors="replace")
 
-    return RunResult(job=job, rc=rc, stdout=stdout, error=error,
-                     seconds=round(time.time() - started, 1))
+    if timed_out:
+        error = f"timeout after {timeout_s}s"
+    elif rc != 0:
+        error = first_error(stdout, stderr)
+    elif not job.has_pass_marker(stdout):
+        error = f"driver exited without completing KDA {job.phase}" if job.phase else "exited 0 but printed no PASS: line"
+    else:
+        error = ""
+    reports = ()
+    if job.phase:
+        directories = Path(job.work_dir).glob("output/*/CostModelSimulationOutput")
+        reports = tuple(str(p) for p in sorted(directories) if p.is_dir())
+    return RunResult(job, rc, stdout, error, round(time.monotonic() - started, 1), stderr, reports)

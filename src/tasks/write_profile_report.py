@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 
 from src.lib import profile
 from src.lib.records import Measurement
@@ -37,18 +38,25 @@ class WriteProfileReport:
     def write(self, run: Measurement) -> dict:
         out_dir = REPO_ROOT / "runs" / "profile"
         out_dir.mkdir(parents=True, exist_ok=True)
-        path = out_dir / f"{run.job.name}_profile.md"
+        path = Path(run.job.work_dir) / f"{run.job.name}_profile.md"
+        latest = out_dir / path.name
+
+        def publish(document: str) -> None:
+            path.write_text(document, encoding="utf-8")
+            # Existing callers use this index. Publish a whole report atomically.
+            with NamedTemporaryFile(mode="w", dir=out_dir, encoding="utf-8", delete=False) as tmp:
+                tmp.write(document)
+            Path(tmp.name).replace(latest)
 
         if not run.found:
             verdict = (
                 f"NO DATA  {run.job.name}: the run produced no swimlane data"
                 + (f" ({run.error})" if run.error else "")
             )
-            path.write_text(
+            publish(
                 f"# Device profile -- {run.job.name}\n\n**{verdict}**\n\n"
                 "A profiling run needs the NPU: the data is copied off the\n"
                 "device, so a sim run has nothing to copy.\n",
-                encoding="utf-8",
             )
             return {"Report": str(path), "Verdict": verdict}
 
@@ -68,6 +76,8 @@ class WriteProfileReport:
             f"# Device profile -- {run.job.name}", "",
             f"**{verdict}**", "",
             f"- kernel: `{run.job.kernel}`",
+            f"- profile invocation: `{' '.join(run.job.cmd)}`",
+            f"- instrumented SHA-256: `{run.instrumented_sha256}`",
             f"- device: {run.job.device_id}",
             f"- data: `{run.profile_dir}`",
         ]
@@ -94,5 +104,5 @@ class WriteProfileReport:
             "(core usage analysis) before it as a prerequisite -- which is what this",
             "report is.",
         ]
-        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        publish("\n".join(lines) + "\n")
         return {"Report": str(path), "Verdict": verdict}

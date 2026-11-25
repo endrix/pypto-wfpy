@@ -40,7 +40,7 @@ DEFAULT_KERNELS = [
 @workflow(inputs={"Kernel": str}, outputs={"Out": str})
 def validate_kernel() -> None:
     """Wire the four phases together."""
-    prepare = Prepare(run_mode=default_run_mode())
+    prepare = Prepare(run_mode=default_run_mode(), dump_ir=False)
     runner = RunSim()
     gate = Gate()
     report = VerdictReport()

@@ -58,66 +58,106 @@ from __future__ import annotations
 
 from pathlib import Path
 import sys
+from typing import Callable
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from src.agents.perf_advisor import PerfAdvisor  # noqa: E402
-from src.agents.tile_doctor import TileDoctor  # noqa: E402
-from src.agents.tune_applier import TuneApplier  # noqa: E402
-from src.agents.tune_planner import TunePlanner  # noqa: E402
+from src.agents.perf_advisor import make_perf_advisor  # noqa: E402
+from src.agents.tile_doctor import make_tile_doctor  # noqa: E402
+from src.agents.tune_applier import make_tune_applier  # noqa: E402
+from src.agents.tune_planner import make_tune_planner  # noqa: E402
 from src.lib.optimize_config import BUDGET  # noqa: E402
 from src.tasks.apply_candidate import ApplyCandidate  # noqa: E402
 from src.tasks.artifact_gate import ArtifactGate  # noqa: E402
+from src.lib.runner import REPO_ROOT
+from src.tasks.simulate_kda import SimulateKda
+from src.tasks.run_selected_kda import RunSelectedKda
 from src.tasks.merge_kernel import MergeKernel  # noqa: E402
 from src.tasks.score_perf import ScorePerf  # noqa: E402
 from src.tasks.write_opt_report import WriteOptReport  # noqa: E402
+from src.tasks.write_viewer_text import WriteViewerText
+from src.viewers.markdown_viewer import MarkdownViewer
 from src.workflows.analyze_flow import analyze_flow  # noqa: E402
 from src.workflows.simulate_flow import simulate_flow  # noqa: E402
 from wfpy import File, connect, workflow  # noqa: E402
 
 
-@workflow(
-    inputs={"Kernel": str},
-    outputs={"Report": File(ext=".md"), "Advice": File(ext=".md")},
-)
-def optimize_flow() -> None:
-    """Measure, decide, edit, re-measure -- with a gate and a doctor."""
-    merge = MergeKernel()
-    simulate = simulate_flow()
-    analyze = analyze_flow()
-    score = ScorePerf(budget=BUDGET)
-    planner = TunePlanner()
-    gate = ArtifactGate()
-    applier = TuneApplier()
-    doctor = TileDoctor()
-    candidate = ApplyCandidate()
-    writer = WriteOptReport()
-    advisor = PerfAdvisor()
+def make_optimize_flow(*, workspace: str = "", kda_op: str = "", **agent_options: str) -> Callable[[], None]:
+    @workflow(
+        inputs={"Kernel": str},
+        outputs={
+            "Report": File(ext=".md"),
+            "Advice": File(ext=".md"),
+            # Carried out so a caller can SEE the run, not only read about it: the
+            # simulator's trace and the compiler's four IR levels.
+            "Swimlane": File(ext=".json"),
+            **{lv: File(ext=".json") for lv in ("TensorGraph", "TileGraph",
+                                                "BlockGraph", "ExecuteGraph")},
+        },
+    )
+    def optimize_flow() -> None:
+        """Measure, decide, edit, re-measure -- with a gate and a doctor."""
+        merge = MergeKernel()
+        simulate = SimulateKda(workspace=workspace, op=kda_op) if kda_op else simulate_flow()
+        analyze = analyze_flow()
+        score = ScorePerf(budget=BUDGET)
+        tools_mode = "native" if workspace else "wfpy-none"
+        planner = make_tune_planner(cli_tools_mode=tools_mode, **agent_options)()
+        gate = ArtifactGate()
+        applier = make_tune_applier(**agent_options)()
+        doctor = make_tile_doctor(cli_tools_mode=tools_mode, **agent_options)()
+        output = Path(workspace) if workspace else REPO_ROOT / "runs"
+        summary_file = WriteViewerText(directory=str(output / "viewers"), label="Summary")
+        summary_view = MarkdownViewer()
+        perf_report_view = MarkdownViewer()
+        bubble_report_view = MarkdownViewer()
+        candidate = ApplyCandidate(directory=str(output / "candidates"))
+        writer = WriteOptReport(directory=str(output / "opt_reports"))
+        advisor = make_perf_advisor(cli_tools_mode=tools_mode, **agent_options)()
 
-    # Measure: the two phases sim_analyze uses, unchanged.
-    connect("Kernel", merge.Initial)
-    connect(merge.Out, simulate.Kernel)
-    connect(simulate.Result, analyze.Result)
-    connect(analyze.Perf, score.Perf)
+        # Measure: the two phases sim_analyze uses, unchanged.
+        connect("Kernel", merge.Initial)
+        connect(merge.Out, simulate.Kernel)
+        connect(simulate.Result, analyze.Result)
+        connect(analyze.Perf, score.Perf)
+        connect(analyze.Summary, summary_file.Text)
+        connect(summary_file.Document, summary_view.In)
+        connect(analyze.PerfReport, perf_report_view.In)
+        connect(analyze.BubbleReport, bubble_report_view.In)
 
-    # Decide, then edit: plan -> verify the plan -> apply exactly it.
-    connect(score.Request, planner.Request)
-    connect(planner.Plan, gate.Plan)
-    # The gate needs the file, not just the plan: a plan says what to change,
-    # and the applier is the node that has to produce the changed file.
-    connect(score.Source, gate.Source)
-    connect(gate.Directive, applier.Directive)
-    connect(applier.Candidate, candidate.Candidate)
+        # Decide, then edit: plan -> verify the plan -> apply exactly it.
+        connect(score.Request, planner.Request)
+        connect(planner.Plan, gate.Plan)
+        # The gate needs the file, not just the plan: a plan says what to change,
+        # and the applier is the node that has to produce the changed file.
+        connect(score.Source, gate.Source)
+        connect(gate.Directive, applier.Directive)
+        connect(applier.Candidate, candidate.Candidate)
 
-    # A candidate the compiler rejected goes to the doctor, not to the bin.
-    connect(score.Broken, doctor.Failure)
-    connect(doctor.Fixed, candidate.Fixed)
+        # A candidate the compiler rejected goes to the doctor, not to the bin.
+        connect(score.Broken, doctor.Failure)
+        connect(doctor.Fixed, candidate.Fixed)
 
-    # Either way, the next kernel goes back round.
-    connect(candidate.Kernel, merge.Retry)
+        # Either way, the next kernel goes back round.
+        connect(candidate.Kernel, merge.Retry)
 
-    # Exit, and then explain the result.
-    connect(score.Result, writer.Result)
-    connect(writer.Report, "Report")
-    connect(writer.Analysis, advisor.Analysis)
-    connect(advisor.Advice, "Advice")
+        # Exit, and then explain the result.
+        # What the measurement phase saw, forwarded for the viewers.
+        connect(analyze.Swimlane, "Swimlane")
+        for level in ("TensorGraph", "TileGraph", "BlockGraph", "ExecuteGraph"):
+            connect(getattr(analyze, level), level)
+
+        if kda_op:
+            final_npu = RunSelectedKda(workspace=workspace, op=kda_op)
+            connect(score.Result, final_npu.Selected)
+            connect(final_npu.Checked, writer.Result)
+        else:
+            connect(score.Result, writer.Result)
+        connect(writer.Report, "Report")
+        connect(writer.Analysis, advisor.Analysis)
+        connect(advisor.Advice, "Advice")
+
+    return optimize_flow
+
+
+optimize_flow = make_optimize_flow()

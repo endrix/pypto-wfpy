@@ -11,6 +11,8 @@
 #   ./run.sh optimize [kernel.py]       # phase 5: bounded agentic perf search
 #   ./run.sh triage [suspect.py] [reference.py]  # localise a bad op (NPU only)
 #   ./run.sh profile [kernel.py]        # measured device profile (NPU only)
+#   ./run.sh author [torch.py] [op]      # author a kernel from PyTorch (5 agents)
+#   ./run.sh kda [torch.py] [op]         # author + optimise + redesign (Codex ACP by default)
 #   ./run.sh plan     <workflow.py>     # dump the wfpy graph as JSON
 #   ./run.sh wfpy     run <args...>    # raw wfpy passthrough, wf-out pinned
 #
@@ -18,7 +20,7 @@
 # PYPTO_POOL sets the concurrent slot count (default 4).
 # PYPTO_RUN_MODE=npu|sim forces the run mode; PYPTO_DEVICES spreads pool slots.
 # PYPTO_WF_OUT overrides the run directory (default <repo>/wf-out).
-# PYPTO_REPAIR_TRANSPORT=acp uses the real claude connector (spends tokens);
+# PYPTO_REPAIR_TRANSPORT=acp uses the default Claude connector (spends tokens);
 # PYPTO_REPAIR_BUDGET caps the repair attempts.
 # WF_SKILLS_ROOT points wfpy at the cannbot pypto-* skills.
 set -euo pipefail
@@ -49,7 +51,7 @@ fi
 
 # The cannbot pypto-* skills are used in place; a symlink into them would be
 # rejected by wfpy's skill-root containment check.
-CANNBOT_OPS="${CANNBOT_OPS:-/home/endrix/git/pypto/cannbot-skills/ops}"
+CANNBOT_OPS="${CANNBOT_OPS:-$ROOT/../pypto/cannbot-skills/ops}"
 if [ -z "${WF_SKILLS_ROOT:-}" ] && [ -d "$CANNBOT_OPS" ]; then
     export WF_SKILLS_ROOT="$CANNBOT_OPS"
 fi
@@ -68,6 +70,8 @@ case "$cmd" in
     optimize)       exec "$PY" "$ROOT/src/optimize.py" "$@" ;;
     triage)         exec "$PY" "$ROOT/src/precision_triage.py" "$@" ;;
     profile)        exec "$PY" "$ROOT/src/profile_kernel.py" "$@" ;;
+    author)         exec "$PY" "$ROOT/src/new_kernel.py" "$@" ;;
+    kda)            exec "$PY" "$ROOT/src/kda_pipeline.py" "$@" ;;
     plan)
         wf="${1:?usage: ./run.sh plan <workflow.py>}"
         case "$(basename "$wf")" in
@@ -79,18 +83,21 @@ case "$cmd" in
             optimize.py)        name=optimize_kernel ;;
             precision_triage.py) name=precision_triage ;;
             profile_kernel.py)  name=profile_kernel ;;
+            new_kernel.py)      name=new_kernel ;;
+            kda_pipeline.py)    name=kda_pipeline ;;
             pool.py)    name=validate_pool ;;
             *)          name=validate_kernel ;;
         esac
-        exec "$PYPTO_VENV/bin/wfpy" plan "$wf" --workflow "$name" --format graph
+        exec "$PYPTO_VENV/bin/wfpy" plan "$wf" --workflow "$name" --format graph "${@:2}"
         ;;
     wfpy)
         # Raw `wfpy run` passthrough, with the run dir pinned the same way the
         # workflows' own main() functions pin it.
-        exec "$PYPTO_VENV/bin/wfpy" run --out-dir "$ROOT/wf-out" "$@"
+        [[ "${1:-}" != run ]] || shift
+        exec "$PYPTO_VENV/bin/wfpy" run --out-dir "${PYPTO_WF_OUT:-$ROOT/wf-out}" "$@"
         ;;
     *)
-        echo "usage: ./run.sh {validate|pool|ir|perf|repair|plan|wfpy} [args...]" >&2
+        echo "usage: ./run.sh {validate|pool|ir|perf|repair|repair-softmax|sim-analyze|optimize|triage|profile|author|kda|plan|wfpy} [args...]" >&2
         exit 2
         ;;
 esac

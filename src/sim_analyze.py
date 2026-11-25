@@ -73,6 +73,8 @@ def sim_analyze() -> None:
     connect(analyze.PerfReport, visualize.PerfReport)
     connect(analyze.BubbleReport, visualize.BubbleReport)
     connect(analyze.Swimlane, visualize.Swimlane)
+    for level in ("TensorGraph", "TileGraph", "BlockGraph", "ExecuteGraph"):
+        connect(getattr(analyze, level), getattr(visualize, level))
 
     connect(analyze.Summary, "Out")
 

@@ -5,14 +5,14 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
+
+from src.lib.skill_paths import ops_root
 
 BUDGET = int(os.environ.get("PYPTO_REPAIR_BUDGET", "2"))
-# acp is the default: these workflows exist to drive a real agent, and a
-# default that quietly does not is how a mock run gets mistaken for a real
-# one. Set PYPTO_REPAIR_TRANSPORT=mock for tests and offline work --
-# the mock reply is deliberately not a usable answer, so the reject path
-# stays exercised. A default run SPENDS TOKENS; the banner says so.
+# The real transport, always. There is no mock: every agent here is
+# answered by a model, and a run that did not call one is not a run of
+# this workflow. PYPTO_REPAIR_TRANSPORT can name another ACP-capable
+# transport, but not a stand-in.
 TRANSPORT = os.environ.get("PYPTO_REPAIR_TRANSPORT", "acp")
 CONNECTOR = os.environ.get("PYPTO_REPAIR_CONNECTOR", "claude")
 IS_ACP = TRANSPORT == "acp"
@@ -28,10 +28,7 @@ TIMEOUT_MS = int(os.environ.get("PYPTO_REPAIR_TIMEOUT_MS", "600000"))
 # Path("ops:ops/pypto-op-perf-tune") is one bogus directory and this skill
 # silently resolves to None, so whether the repair agent gets its skill would
 # depend on which config module was imported first.
-SKILLS_ROOT = Path(
-    os.environ.get("WF_SKILLS_ROOT", "/home/endrix/git/pypto/cannbot-skills/ops")
-    .split(os.pathsep)[0]
-)
+SKILLS_ROOT = ops_root()
 SKILL_NAME = os.environ.get("PYPTO_REPAIR_SKILL", "pypto-precision-debug")
 # Only claim the skill if it is really there; wfpy raises if it cannot resolve.
 REPAIR_SKILL = SKILL_NAME if (SKILLS_ROOT / SKILL_NAME / "SKILL.md").is_file() else None
@@ -42,7 +39,7 @@ PROMPT = """You are fixing a PyPTO (Ascend NPU) Tensor-mode kernel that fails
 its own numeric self-check against a pure-torch reference.
 
 Rules:
-- - Change only what is needed to make the check pass. Keep the `--run_mode {sim,npu}`
+- Change only what is needed to make the check pass. Keep the `--run_mode {sim,npu}`
   flag, the PASS:/FAIL: prints and the exit codes.
 - Do not weaken the test: leave the tolerances, the torch reference and every
   assertion exactly as they are.

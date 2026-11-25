@@ -5,6 +5,10 @@
     "PerfReport"   --> MarkdownViewer
     "BubbleReport" --> MarkdownViewer
     "Swimlane"     --> SwimlaneViewer
+    "TensorGraph"  --> PyPTOGraphViewer      tensor -> tile -> block -> execute
+    "TileGraph"    --> PyPTOGraphViewer
+    "BlockGraph"   --> PyPTOGraphViewer
+    "ExecuteGraph" --> PyPTOGraphViewer
 
 Sinks only, so the workflow declares no outputs. Viewers have no action of their
 own and open a file on DISK, which is why every port here is a ``File`` and why
@@ -27,6 +31,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from src.viewers.markdown_viewer import MarkdownViewer  # noqa: E402
+from src.viewers.pypto_graph_viewer import PyPTOGraphViewer  # noqa: E402
 from src.viewers.swimlane_viewer import SwimlaneViewer  # noqa: E402
 from wfpy import File, connect, workflow  # noqa: E402
 
@@ -36,15 +41,21 @@ from wfpy import File, connect, workflow  # noqa: E402
         "PerfReport": File(ext=".md"),
         "BubbleReport": File(ext=".md"),
         "Swimlane": File(ext=".json"),
+        **{lv: File(ext=".json") for lv in ("TensorGraph", "TileGraph",
+                                            "BlockGraph", "ExecuteGraph")},
     },
     outputs={},
 )
 def visualize_flow() -> None:
-    """Three sinks: two reports to read, one trace to render."""
+    """Seven sinks: two reports, one trace, and the compiler's four IR levels."""
     pipes = MarkdownViewer()
     cores = MarkdownViewer()
     swim = SwimlaneViewer()
+    levels = {lv: PyPTOGraphViewer() for lv in ("TensorGraph", "TileGraph",
+                                                "BlockGraph", "ExecuteGraph")}
 
     connect("PerfReport", pipes.In)
     connect("BubbleReport", cores.In)
     connect("Swimlane", swim.Swimlane)
+    for name, view in levels.items():
+        connect(name, view.Graph)

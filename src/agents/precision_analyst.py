@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from src.agents import english_output
 from src.lib.triage_config import (
     ANALYST_PROMPT,
     ANALYST_SKILL,
@@ -17,7 +18,7 @@ from wfpy import File, Port, agent
 
 
 @agent(
-    prompt=ANALYST_PROMPT,
+    prompt=english_output(ANALYST_PROMPT),
     transport=TRANSPORT,
     connector=CONNECTOR if IS_ACP else "",
     model=MODEL,
@@ -25,7 +26,6 @@ from wfpy import File, Port, agent
     # cannbot's `pypto-precision-debug`: user-code-level precision triage, which
     # is what is left once the op is known.
     skill=ANALYST_SKILL,
-    mock_outputs={"Analysis": "_mock transport: no analysis was requested._\n"},
 )
 class PrecisionAnalyst:
     """Given the culprit op, say which source line it is and how to fix it.

@@ -7,7 +7,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from src.lib.agent_io import read_json
-from src.lib.runner import REPO_ROOT
 from wfpy import Port, action, task
 
 
@@ -24,6 +23,7 @@ class ApplyCandidate:
     each other's files when both loops run in one process.
     """
 
+    directory: str
     _n: int = 0
 
     class Ports:
@@ -33,7 +33,7 @@ class ApplyCandidate:
 
     def _write(self, candidate: str) -> str:
         self._n += 1
-        out_dir = REPO_ROOT / "runs" / "candidates"
+        out_dir = Path(self.directory)
         out_dir.mkdir(parents=True, exist_ok=True)
         target = out_dir / f"candidate{self._n}.py"
         # The agent's port is .json, so the reply is an object with the source
@@ -43,6 +43,8 @@ class ApplyCandidate:
         # successful turn.
         reply = read_json(candidate, required=("kernel",))
         target.write_text(reply["kernel"].rstrip("\n") + "\n", encoding="utf-8")
+        change = f"{reply.get('item', 'repair')} {reply.get('change', reply.get('constraint', ''))}".strip()
+        target.with_suffix(".change.txt").write_text(change[:600], encoding="utf-8")
         return str(target)
 
     @action(consumes={"Candidate": 1}, produces={"Kernel": 1})

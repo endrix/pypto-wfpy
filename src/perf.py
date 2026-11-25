@@ -38,7 +38,7 @@ DEFAULT_KERNELS = [
 @workflow(inputs={"Kernel": str}, outputs={"Report": str})
 def analyze_perf() -> None:
     """Wire the four perf phases together."""
-    prepare = Prepare(run_mode=default_run_mode())
+    prepare = Prepare(run_mode=default_run_mode(), dump_ir=False)
     runner = RunSim()
     collect = CollectPerf()
     analyze = AnalyzePerf()

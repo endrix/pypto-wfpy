@@ -23,22 +23,27 @@ class CollectPerf:
     def collect(self, result: RunResult) -> PerfData:
         base = result.sim_output_dir
         if not result.passed or not base:
-            return PerfData(result=result, found=False, sim_dir=base)
+            return PerfData(result=result, found=False, sim_dir="")
+        directories = ([Path(p) for p in result.report_dirs] if result.job.phase
+                       else [Path(base) / "CostModelSimulationOutput"])
+        components = {}
+        for directory in directories:
+            stat = directory / "_simulate.stat.report.txt"
+            if not stat.is_file():
+                return PerfData(result=result, found=False, sim_dir=str(directory))
+            counters = parse_stat_report(stat)
+            if counters[0] <= 0:
+                return PerfData(result=result, found=False, sim_dir=str(directory))
+            components[str(directory)] = counters
 
-        sim_dir = Path(base) / "CostModelSimulationOutput"
-        stat = sim_dir / "_simulate.stat.report.txt"
-        metrics = sim_dir / "_simulate.perf.metrics.json"
-        if not stat.is_file():
-            return PerfData(result=result, found=False, sim_dir=str(sim_dir))
-
-        cycles, pipe_pct, pipe_cycles, counters = parse_stat_report(stat)
+        # Separate JIT calls within one fixture are sequential. Rank by their
+        # combined cost; attribute pipe, stall and viewer data to the costliest.
+        dominant = max(components, key=lambda path: components[path][0])
+        _, pipe_pct, pipe_cycles, counters = components[dominant]
+        costs = {path: values[0] for path, values in components.items()}
         return PerfData(
-            result=result,
-            found=True,
-            sim_dir=str(sim_dir),
-            total_cycles=cycles,
-            pipe_pct=pipe_pct,
-            pipe_cycles=pipe_cycles,
-            counters=counters,
-            tile_ops=parse_tile_ops(metrics) if metrics.is_file() else {},
+            result=result, found=True, sim_dir=dominant, total_cycles=sum(costs.values()),
+            pipe_pct=pipe_pct, pipe_cycles=pipe_cycles, counters=counters,
+            tile_ops=parse_tile_ops(Path(dominant) / "_simulate.perf.metrics.json"),
+            component_cycles=costs if result.job.phase else {},
         )

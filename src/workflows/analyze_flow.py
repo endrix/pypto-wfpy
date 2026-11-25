@@ -22,6 +22,8 @@ independently:
   MTE_IN-bound on four cores out of forty-eight, and only this says so.
 - ``LocateSwimlane`` summarises nothing; it just finds the trace, because what
   reads it is the Toolkit's renderer rather than this workflow.
+- ``LocateStageGraphs`` does the same for the compiler's per-pass dumps, one per
+  IR level, so the lowering can be looked at and not only the timings.
 """
 
 from __future__ import annotations
@@ -35,6 +37,7 @@ from src.lib.records import PerfData, RunResult  # noqa: E402
 from src.tasks.analyze_bubbles import AnalyzeBubbles  # noqa: E402
 from src.tasks.analyze_perf import AnalyzePerf  # noqa: E402
 from src.tasks.collect_perf import CollectPerf  # noqa: E402
+from src.tasks.locate_stage_graphs import LocateStageGraphs  # noqa: E402
 from src.tasks.locate_swimlane import LocateSwimlane  # noqa: E402
 from wfpy import File, connect, workflow  # noqa: E402
 
@@ -54,6 +57,12 @@ from wfpy import File, connect, workflow  # noqa: E402
         # them rather than read them -- the optimization loop scores on
         # total_cycles. Left unconnected by sim_analyze, which only reports.
         "Perf": PerfData,
+        # One compute-graph dump per IR level, so the compiler's own view of the
+        # kernel can be rendered beside the numbers.
+        "TensorGraph": File(ext=".json"),
+        "TileGraph": File(ext=".json"),
+        "BlockGraph": File(ext=".json"),
+        "ExecuteGraph": File(ext=".json"),
     },
 )
 def analyze_flow() -> None:
@@ -62,8 +71,11 @@ def analyze_flow() -> None:
     pipes = AnalyzePerf()
     cores = AnalyzeBubbles()
     swim = LocateSwimlane()
+    graphs = LocateStageGraphs()
 
     connect("Result", collect.Result)
+    # The IR dumps come from the run itself, not from the parsed counters.
+    connect("Result", graphs.Result)
 
     connect(collect.Perf, pipes.Perf)
     connect(collect.Perf, cores.Perf)
@@ -75,3 +87,6 @@ def analyze_flow() -> None:
     connect(pipes.Report, "PerfReport")
     connect(cores.Report, "BubbleReport")
     connect(swim.Swimlane, "Swimlane")
+
+    for level in ("TensorGraph", "TileGraph", "BlockGraph", "ExecuteGraph"):
+        connect(getattr(graphs, level), level)

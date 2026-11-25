@@ -25,8 +25,7 @@ reduces columns instead of rows. Point it at ``examples/02_row_softmax.py`` and
 the loop reports ALREADY OK on the first run without calling the agent.
 
 Run:
-    ./run.sh repair-softmax                                 # mock transport
-    PYPTO_REPAIR_TRANSPORT=acp ./run.sh repair-softmax      # real; spends tokens
+    ./run.sh repair-softmax                                 # spends tokens
     ./run.sh repair-softmax examples/02_row_softmax.py      # the working kernel
 """
 

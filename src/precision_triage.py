@@ -30,7 +30,6 @@ read. The matmul and the scaling were never in question.
 Run:
     ./run.sh triage                                     # the shipped fixture
     ./run.sh triage <suspect.py> <reference.py>
-    PYPTO_TRIAGE_TRANSPORT=mock ./run.sh triage         # no tokens; skips the analysis
 """
 
 import logging

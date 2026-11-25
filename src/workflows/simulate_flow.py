@@ -10,6 +10,10 @@ default resolves to ``npu``, and a device run compiles the kernel and writes no
 cost-model output at all, so every analysis downstream would report SKIP. The
 simulator is the instrument here, so the flow pins it.
 
+It also dumps the compiler's per-pass graphs, so the four IR levels can be
+rendered afterwards. Only the four passes that sit on a level transition
+(``graph.DUMP_PASSES``) -- 50 files rather than ~230.
+
 What that buys, under ``runs/<kernel>_sim/output/<stamp>/CostModelSimulationOutput``:
 ``_simulate.stat.report.txt`` (pipe usage), ``_simulate.perf.metrics.json``
 (tile-op work amounts), ``bubble_analysis.log`` (per-core work and wait) and
@@ -28,6 +32,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from src.lib.records import RunResult  # noqa: E402
+from src.lib import graph  # noqa: E402
 from src.tasks.prepare import Prepare  # noqa: E402
 from src.tasks.run_sim import RunSim  # noqa: E402
 from wfpy import connect, workflow  # noqa: E402
@@ -38,7 +43,7 @@ RUN_MODE = "sim"
 @workflow(inputs={"Kernel": str}, outputs={"Result": RunResult})
 def simulate_flow() -> None:
     """Two actors: resolve the kernel into a job, then run it under the model."""
-    prepare = Prepare(run_mode=RUN_MODE)
+    prepare = Prepare(run_mode=RUN_MODE, dump_ir=True)
     runner = RunSim()
 
     connect("Kernel", prepare.Kernel)

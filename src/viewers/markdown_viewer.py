@@ -9,7 +9,7 @@ from wfpy import File, Port, viewer
 
 @viewer(
     action_name="openWith",
-    inputs=["Report"],
+    inputs=["In"],
     viewType="vscode.markdown.preview.editor",
 )
 class MarkdownViewer:

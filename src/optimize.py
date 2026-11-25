@@ -12,15 +12,14 @@ Four nodes, two of which are sub-workflows and one a viewer:
 phases ``sim_analyze`` uses to report -- inside a bounded agent loop that
 measures, asks for a rewrite, re-measures and keeps the winner.
 
-Costs nothing by default: ``PYPTO_OPT_TRANSPORT=mock`` makes both agents answer
-from ``mock_outputs``, so the loop runs to its budget and rejects every
-candidate. That is the path worth having a default for -- it proves termination
-and the reject branch offline. Set ``acp`` to spend tokens on a real search.
+Every run calls a model. There is no stand-in transport: the loop exists to
+find out what an agent does to a kernel, and a run that answered itself would
+only tell us the wiring holds -- which `wfpy plan` and the linter already do,
+for nothing.
 
 Run:
-    ./run.sh optimize                                   # mock, no tokens
+    ./run.sh optimize                                   # spends tokens
     ./run.sh optimize examples/04_layer_norm.py
-    PYPTO_OPT_TRANSPORT=acp ./run.sh optimize           # real; spends tokens
     PYPTO_OPT_BUDGET=4 ./run.sh optimize                # more rounds
 """
 

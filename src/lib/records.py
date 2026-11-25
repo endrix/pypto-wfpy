@@ -29,6 +29,12 @@ class JobSpec:
     cmd: tuple[str, ...]
     slot: int = 0
     device_id: int = 0
+    phase: str = ""
+
+    def has_pass_marker(self, stdout: str) -> bool:
+        if self.phase:
+            return f"PASS: KDA {self.phase}" in stdout.splitlines()
+        return "PASS:" in stdout
 
 
 @dataclass(frozen=True)
@@ -40,16 +46,20 @@ class RunResult:
     stdout: str
     error: str
     seconds: float
+    stderr: str = ""
+    report_dirs: tuple[str, ...] = ()
 
     @property
     def passed(self) -> bool:
         # Both conditions matter: exit 0 alone would also accept a kernel that
         # printed nothing, and a PASS line alone would accept a late crash.
-        return self.rc == 0 and "PASS:" in self.stdout
+        return self.rc == 0 and self.job.has_pass_marker(self.stdout)
 
     @property
     def sim_output_dir(self) -> str:
         """Newest simulator output dir for this run, or "" if there is none."""
+        if self.job.phase:
+            return str(Path(self.report_dirs[-1]).parent) if self.report_dirs else ""
         outputs = [p for p in Path(self.job.work_dir).glob("output/*") if p.is_dir()]
         if not outputs:
             return ""
@@ -122,6 +132,15 @@ class PerfData:
     pipe_cycles: dict = field(default_factory=dict)  # pipe -> avg cycles
     counters: dict = field(default_factory=dict)     # other scalar counters
     tile_ops: dict = field(default_factory=dict)     # op name -> work amount
+    component_cycles: dict = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class SearchResult:
+    verdict: str
+    measurement_dir: str
+    kernel: str = ""
+    npu_report: str = ""
 
 
 @dataclass(frozen=True)
@@ -195,6 +214,7 @@ class Measurement:
     profile_dir: str          # the output_* dir that actually holds the artifacts
     workspace_kb: int         # the S-20 hint from stdout, 0 if absent
     error: str = ""
+    instrumented_sha256: str = ""
 
     @property
     def found(self) -> bool:
