@@ -13,6 +13,10 @@
 #   ./run.sh profile [kernel.py]        # measured device profile (NPU only)
 #   ./run.sh author [torch.py] [op]      # author a kernel from PyTorch (5 agents)
 #   ./run.sh kda [torch.py] [op]         # author + optimise + redesign (Codex ACP by default)
+#   ./run.sh npu-tune                   # tune KDA using measured device profiles
+#   ./run.sh residual-rmsnorm            # generate and compare two fused kernels
+#   ./run.sh precision-repair            # localize and repair an attention defect
+#   ./run.sh panko                       # resume a PANKO optimization campaign
 #   ./run.sh plan     <workflow.py>     # dump the wfpy graph as JSON
 #   ./run.sh wfpy     run <args...>    # raw wfpy passthrough, wf-out pinned
 #
@@ -72,6 +76,10 @@ case "$cmd" in
     profile)        exec "$PY" "$ROOT/src/profile_kernel.py" "$@" ;;
     author)         exec "$PY" "$ROOT/src/new_kernel.py" "$@" ;;
     kda)            exec "$PY" "$ROOT/src/kda_pipeline.py" "$@" ;;
+    npu-tune)         exec "$PY" "$ROOT/src/npu_tune.py" "$@" ;;
+    residual-rmsnorm) exec "$PY" "$ROOT/src/residual_rmsnorm.py" "$@" ;;
+    precision-repair) exec "$PY" "$ROOT/src/precision_repair.py" "$@" ;;
+    panko)            exec "$PY" "$ROOT/src/panko_search.py" "$@" ;;
     plan)
         wf="${1:?usage: ./run.sh plan <workflow.py>}"
         case "$(basename "$wf")" in
@@ -85,6 +93,10 @@ case "$cmd" in
             profile_kernel.py)  name=profile_kernel ;;
             new_kernel.py)      name=new_kernel ;;
             kda_pipeline.py)    name=kda_pipeline ;;
+            npu_tune.py)        name=npu_tune ;;
+            residual_rmsnorm.py) name=residual_rmsnorm ;;
+            precision_repair.py) name=precision_repair ;;
+            panko_search.py)    name=panko_search ;;
             pool.py)    name=validate_pool ;;
             *)          name=validate_kernel ;;
         esac
@@ -97,7 +109,7 @@ case "$cmd" in
         exec "$PYPTO_VENV/bin/wfpy" run --out-dir "${PYPTO_WF_OUT:-$ROOT/wf-out}" "$@"
         ;;
     *)
-        echo "usage: ./run.sh {validate|pool|ir|perf|repair|repair-softmax|sim-analyze|optimize|triage|profile|author|kda|plan|wfpy} [args...]" >&2
+        echo "usage: ./run.sh {validate|pool|ir|perf|repair|repair-softmax|sim-analyze|optimize|triage|profile|author|kda|npu-tune|residual-rmsnorm|precision-repair|panko|plan|wfpy} [args...]" >&2
         exit 2
         ;;
 esac

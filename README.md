@@ -21,6 +21,10 @@ without touching the others.
 | Precision triage | `src/precision_triage.py` | Compare suspect and reference on the NPU | `triage` |
 | Author | `src/new_kernel.py` | Turn a PyTorch source into a PyPTO kernel | `author` |
 | KDA | `src/kda_pipeline.py` | Author, verify, optimize, then run the selected kernel on the NPU | `kda` |
+| NPU-guided tuning | `src/npu_tune.py` | Profile the incumbent, edit it, verify on device and compare paired timings | `npu-tune` |
+| Competing kernel designs | `src/residual_rmsnorm.py` | Generate two residual RMSNorm kernels, tune each and compare with unfused PyTorch | `residual-rmsnorm` |
+| Precision repair | `src/precision_repair.py` | Localize a real attention fault, patch one statement and rerun the failing fixtures | `precision-repair` |
+| PANKO search | `src/panko_search.py` | Resume an optimization tree and verify the delivered KDA kernel | `panko` |
 
 ## KDA workflow
 
@@ -66,7 +70,7 @@ its own directory under `evaluations/`. The score sums cycles across sequential
 JIT components of the scoring fixture. Pipe and stall counters come from the
 component with the highest cycle count.
 
-The standalone optimizer and repair workflows use Claude ACP by default.
+The original `optimize` and `repair` commands use Claude ACP by default.
 Agent calls use the signed-in connector account. KDA passes its own connector
 and model settings to each nested stage.
 
@@ -111,6 +115,106 @@ By default, `runs/` and `wf-out/` are inside the repository. wfpy defaults its `
 to `<repo>/wf-out` instead, overridable with `PYPTO_WF_OUT`. `./run.sh wfpy run
 ...` passes `--out-dir` for the same reason, since the bare `wfpy` CLI bypasses
 the workflows' own `main()`.
+
+## Run the agentic workflows
+
+Each entry in the table is an IDE-openable `@workflow`. The four workflows below
+default to Codex ACP and `gpt-6.2-sol` and accept the same `PYPTO_COMBO_MODEL`
+and `PYPTO_COMBO_CONNECTOR` overrides as KDA. They require a working Ascend NPU
+and the cannbot ops skills. To keep journals beside the IDE runs, launch from
+the repository root with the following environment.
+
+```bash
+export PYPTO_WF_OUT="$PWD/src/wf-out"
+export PYPTO_DEVICES=0
+export TILE_FWK_DEVICE_ID="$PYPTO_DEVICES"
+./run.sh npu-tune
+./run.sh residual-rmsnorm
+./run.sh precision-repair
+```
+
+**NPU-guided KDA tuning.** The verified example is the starting kernel. Each
+round profiles the current kernel on the chosen NPU. The `tune-swimlane` agent
+can request `tune-incore` for a measured task that persists in a fresh trace.
+Proposed edits must pass two small simulator fixtures and five NPU fixtures.
+The workflow alternates the incumbent and candidate in ten timing pairs with
+profiling off. Adoption requires at least nine wins and a median paired gain of
+at least 1%. The IDE shows the profile, trace, source diff and verdict. Set
+`PYPTO_DEVICE_TUNE_BUDGET` to the maximum number of edits (default 3), or to
+0 for a baseline verification and profile. Workspaces are in `custom/device_tune/`.
+
+**Competing residual RMSNorm designs.** A planner gives two designers the same
+FP32 contract for `(normalized, residual_sum)`. One branch reuses the elementwise
+residual sum across normalization and the other splits the feature reduction. Each gets its own
+verification brief, implementation, one authoring retry, and the same NPU-tuning
+budget. The final comparison rotates the two candidates and unfused PyTorch on
+one device, at 64 × 128 and a held-out 37 × 160. A candidate must win at least
+nine of twelve rounds and improve median latency by at least 2% on **both**
+shapes. Unfused PyTorch can win. Branch artifacts and the comparison report
+are in `custom/residual_rmsnorm/`.
+
+**Precision repair.** The bundled attention kernel normalizes along the wrong
+axis. The workflow captures device checkpoints, asks the call-review and
+binary-search agents to identify the first divergence, then gives a repair
+agent the evidence. A scoped edit is accepted only after all three external
+fixtures pass on the NPU. The frozen reference and fixture driver live outside
+the editable candidate. `PYPTO_PRECISION_REPAIR_BUDGET` defaults to two attempts.
+Check `custom/precision_repair/` for the device logs, diff and terminal verdict.
+
+**Resumable PANKO search.** Install its tile-search dependency in the workflow
+venv. Use a named workspace to continue the same campaign after an interruption.
+
+```bash
+.venv/bin/python -m pip install 'optuna>=2,<5'
+export PYPTO_PANKO_WORKSPACE="$PWD/custom/panko/kda-demo"
+export PYPTO_PANKO_BUDGET=6
+./run.sh panko
+```
+
+The PANKO agent drives the installed vendor harness. For the tested CANN 9.2
+build, the workspace keeps a versioned copy with adaptations for PyPTO enum
+iteration, JSON replies from a reused worker and the nested JIT in the KDA seed.
+The wrapper check permits edits inside that JIT body and freezes its host factory. Its tree contains
+optimization intents. Each selected edit starts from the best measured program.
+When the harness supplies a tile value, the graph skips the coder. Search checkpoints and worker state live in the campaign workspace. To resume, repeat the same
+command with its original device, budget and fixture configuration. The
+IDE shows the open intents and the final verdict. The optional
+`PYPTO_PANKO_LINT_ROOT` points to the external hooks directory containing
+`pypto_op_lint` when available. The setup uses the project KDA correctness
+fixtures and harness feasibility checks on hosts without the hooks.
+
+The default budget is six charged evaluations including the baseline. The
+vendor objective is **AICore microseconds with profiling enabled**. Before
+publishing a winner, the workflow checks the harness stop marker, source hash
+and best measured node, disables the profiler in a delivery copy, and runs the
+five fixtures and synchronized end-to-end timing on the NPU. To compare with
+another KDA run, set `PYPTO_PANKO_COMPARE_KERNEL` to that run's selected Python
+file. The report includes ten paired end-to-end measurements against it. Use
+the same seed kernel and record each search budget when comparing strategies.
+
+For a preview of a workflow's nested graph, use the plan command.
+
+```bash
+./run.sh plan src/residual_rmsnorm.py --hierarchy
+```
+
+### Results from the November 25, 2026 NPU runs
+
+The four workflows ran with Codex ACP and `gpt-6.2-sol` on separate Ascend
+devices. With the output directory set as above, each workflow writes its
+verdict to `src/wf-out/<run-id>/Out.md`.
+
+| Command | Device | Hardware result |
+|---|---:|---|
+| `precision-repair` | 0 | The first repair changed the softmax axis from 0 to 1. All three fp16 fixtures passed (seeds 0, 17 and 29). |
+| `npu-tune` | 1 | The three KDA edits won 0, 5 and 4 of their 10 timing pairs. The verified starting kernel remained the winner. |
+| `residual-rmsnorm` | 2 | Both generated kernels passed. Unfused PyTorch had the lowest median latency at both 64 × 128 (0.289 ms) and 37 × 160 (0.269 ms). The faster generated design, row reuse, took 2.777 ms and 2.729 ms respectively. |
+| `panko` | 3 | The six-evaluation search delivered the baseline at 582.58 µs of profiled AICore time. The last candidate reached 349.94 µs during refinement before the budget expired. |
+
+A separate final check of that PANKO candidate passed all five NPU fixtures.
+With profiling off at 128 × 64, its median synchronized call took 3.406 ms
+and the delivered baseline took 3.542 ms. Each median came from a separate
+ten-call run. The workflow's recorded winner remains the baseline.
 
 ## Setup
 
