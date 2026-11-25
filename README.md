@@ -17,30 +17,75 @@ without touching the others.
 | **Phase 4 (nested)** | `src/repair_softmax.py` | `KernelSource → repair_flow → RepairReportViewer` | `repair-softmax` |
 | **Phase 5** | `src/sim_analyze.py` | `KernelSource → simulate_flow → analyze_flow → visualize_flow` | `sim-analyze` |
 | **Phase 6** | `src/optimize.py` | `KernelSource → optimize_flow → MarkdownViewer` | `optimize` |
+| Device profile | `src/profile_kernel.py` | Capture and analyze an NPU timeline | `profile` |
+| Precision triage | `src/precision_triage.py` | Compare suspect and reference on the NPU | `triage` |
+| Author | `src/new_kernel.py` | Turn a PyTorch source into a PyPTO kernel | `author` |
+| KDA | `src/kda_pipeline.py` | Author, verify, optimize, then run the selected kernel on the NPU | `kda` |
 
-Phases 5 and 6 nest: `optimize_flow` contains `simulate_flow` and `analyze_flow`
-unchanged, wrapped in a bounded agent loop, so the measurement half is shared
-with `sim-analyze` rather than reimplemented. Both agents answer from
-`mock_outputs` by default and cost nothing; set `PYPTO_OPT_TRANSPORT=acp` to
-spend tokens on a real search.
+## KDA workflow
 
+Open `src/kda_pipeline.py` in the wfpy IDE or use the same workflow from the CLI.
+It takes `torch_src/kda_decay_matrix.py` as input. All ten agents use the
+**Codex ACP connector and `gpt-6.2-sol`** by default and write their replies and
+artifacts in English. To change the model, set `PYPTO_COMBO_MODEL` to a model
+offered by your connector. To switch connectors, set both variables.
+
+```bash
+PYPTO_WF_OUT="$PWD/src/wf-out" ./run.sh kda
+PYPTO_COMBO_MODEL="<model-id>" ./run.sh kda
+PYPTO_COMBO_CONNECTOR=claude PYPTO_COMBO_MODEL=sonnet ./run.sh kda
+./run.sh plan src/kda_pipeline.py --hierarchy
 ```
-examples/           four verified PyPTO Tensor-mode kernels (see examples/README.md)
-fixtures/           deliberately broken kernels, for testing the repair loop
-src/validate.py     the five top-level workflows live at the src/ root
-src/pool.py
-src/ir.py
-src/perf.py
-src/repair.py
-src/workflows/      sub-workflows, when a workflow is instantiated inside another
-src/tasks/          one @task per file
-src/agents/         one @agent per file
-src/tools/          one @tool per file
-src/lib/            shared non-actor code: records, runner, graph, sim_report,
-                    repair_config
-tools/              run_with_ir.py -- per-pass IR dumping without editing a kernel
-runs/               per-kernel work dirs: reports, diffs, simulator output
-wf-out/             wfpy run dirs: journals, queue traces, agent transcripts
+
+Set these variables in the IDE process environment before opening the workflow.
+The CLI writes journals to `wf-out/` by default. For the same output location
+as the first command, select `src/wf-out` in the IDE's run output setting.
+Each run keeps its authoring documents, candidates and evaluation logs under
+`custom/kda_decay_matrix/<workspace-id>/`. In the IDE, the `combo` graph has a viewer connected to the author’s
+`Verdict` output. Its `search` graph has viewers for the analysis node’s
+`Summary`, `PerfReport` and `BubbleReport` outputs.
+The [verified kernel and benchmark](examples/README.md#verified-kda-kernel)
+are included as a reproducible example.
+
+| Phase | Fixtures | Default deadline | Override (seconds) |
+|---|---|---:|---|
+| Torch golden on NPU, before design | Five fixtures covering both masks, tails and wide decay, compared with a CPU FP64 reference | 1800 s | `PYPTO_KDA_GOLDEN_TIMEOUT_S` |
+| Kernel on NPU, after development | Same five fixtures, compared with FP64 and with the saved, validated golden outputs | 1800 s | `PYPTO_KDA_VERIFY_TIMEOUT_S` |
+| Simulator smoke check per candidate | `(17, 7)` with the diagonal and `(2, 1)` with a wide gate step and strict lower mask | 900 s | `PYPTO_KDA_SMOKE_TIMEOUT_S` |
+| Simulator score per candidate | `(128, 64)`, seed 0, diagonal included, cumulative gates | 1800 s | `PYPTO_KDA_SCORE_TIMEOUT_S` |
+| Final selected kernel on NPU | Five correctness fixtures, then synchronized end-to-end latency on `(128, 64)` with three warmups and ten measured calls | 1800 s | `PYPTO_KDA_FINAL_TIMEOUT_S` |
+
+Both Python artifacts must compile before their fixtures run. On failure the
+owning author receives the diagnostic and one retry. A second golden failure
+ends the run before design. Both artifacts must return finite FP32 output
+within `atol=rtol=1e-3` of FP64, including the retained diagonal of the
+wide-step fixture. Masked entries must be exactly zero.
+
+Each subprocess evaluation retains `stdout.log`, `stderr.log` and the simulator outputs in
+its own directory under `evaluations/`. The score sums cycles across sequential
+JIT components of the scoring fixture. Pipe and stall counters come from the
+component with the highest cycle count.
+
+The standalone optimizer and repair workflows use Claude ACP by default.
+Agent calls use the signed-in connector account. KDA passes its own connector
+and model settings to each nested stage.
+
+```text
+examples/           standalone kernels and the verified KDA implementation
+fixtures/           deliberately broken kernels for repair and triage
+torch_src/          source operators for the authoring workflows
+src/                workflow entry points (see table above)
+src/workflows/      reusable nested workflows
+src/tasks/          deterministic workflow tasks
+src/agents/         model-backed workflow actors
+src/sources/        workflow inputs
+src/viewers/        IDE result viewers
+src/lib/            shared runner, records, config and report parsing
+tools/              IR dumping and the KDA fixture driver
+tests/              workflow regression tests
+custom/             generated authoring and search workspaces
+runs/               per-kernel reports, diffs and simulator output
+wf-out/             wfpy journals, queue traces and agent transcripts
 ```
 
 **One actor per file.** Every `@task`, `@agent` and `@tool` lives in its own
@@ -61,8 +106,7 @@ Because wfpy loads a workflow by path, each one puts the project root on
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 ```
 
-Both `runs/` and `wf-out/` are always inside the repo, whatever directory you
-invoke from. wfpy defaults its `out_dir` to `./wf-out` relative to the
+By default, `runs/` and `wf-out/` are inside the repository. wfpy defaults its `out_dir` to `./wf-out` relative to the
 *invocation* cwd, which would otherwise scatter run logs; every workflow pins it
 to `<repo>/wf-out` instead, overridable with `PYPTO_WF_OUT`. `./run.sh wfpy run
 ...` passes `--out-dir` for the same reason, since the bare `wfpy` CLI bypasses
@@ -80,8 +124,30 @@ python3 -m venv --system-site-packages .venv
 ./.venv/bin/pip install --index-url https://download.pytorch.org/whl/cpu torch==2.9.0
 ./.venv/bin/pip install torch_npu==2.9.0          # device runs; omit for sim only
 ./.venv/bin/pip install numpy pyyaml matplotlib pandas
-./.venv/bin/pip install -e "/home/endrix/git/workflow/wfpy[agent]"
+./.venv/bin/pip install "wfpy[agent] @ git+https://github.com/huawei-csl/wfpy.git@6678b3309735fdd8dadad3c568a8d7825022aa24"
 ```
+
+This is the wfpy 1.3.2 revision used to validate the KDA graph. Install and
+authenticate its Codex connector on the host where the workflow runs.
+
+```bash
+npm install -g @openai/codex @agentclientprotocol/codex-acp
+codex login
+source .venv/bin/activate
+wfpy connectors
+```
+
+The IDE extension needs `wfpy`, `wfpy-sidecar` and `codex-acp` on its executable
+search path. Launch the IDE from the activated environment, or set
+`wfpy.cliCommand` and `wfpy.sidecarCommand` in user settings or in the local
+`.vscode/settings.json` to the absolute paths of the two executables in this
+checkout’s `.venv/bin/`. Select `.venv/bin/python` as the Python interpreter.
+
+For cannbot skills, the project looks in `../pypto/cannbot-skills/ops` relative
+to the repository. Set `CANNBOT_OPS` to the collection's `ops` directory
+if it lives elsewhere. An explicit `WF_SKILLS_ROOT` takes precedence.
+Run the workflow regression suite with
+`OMP_NUM_THREADS=2 .venv/bin/python -m unittest discover -s tests -q`.
 
 > **Pin the torch/torch_npu pair; do not install "latest".** 2.9.0/2.9.0 works
 > here (8 devices visible), as does 2.10.0/2.10.0. But `torch_npu` 2.13.0 and
@@ -92,32 +158,24 @@ python3 -m venv --system-site-packages .venv
 >
 > Use the CPU index for torch: the default index serves a `+cu130` build that
 > drags ~3GB of unusable `nvidia-*` wheels onto an Ascend box.
->
-> Other venvs on this machine already run the working pair and are the reference
-> if these versions ever stop resolving: `pto-kernels/.venv`,
-> `pto-mlir-cannbench/.venv` (2.9.0) and `workflow/old_wfpy/.venv` (2.10.0).
 
 `run.sh` sources the CANN env itself, so every command below works from a bare shell.
 
 ### Run mode: device or simulator
 
-The workflows auto-detect. `default_run_mode()` returns `npu` when `torch_npu`
-imports, else falls back to `sim`; `PYPTO_RUN_MODE=npu|sim` forces either.
+Workflows that use `default_run_mode()` select `npu` when the kernel interpreter
+has `torch_npu` installed. Set `PYPTO_RUN_MODE=npu|sim` to override them.
+The KDA fixture driver selects the mode per phase as shown in the table above.
 
-- **`npu`** runs on the real hardware, and is verified: all four kernels pass on
-  910B2, spread over devices 0-3. Tensor mode fully supports this host — the
+- **`npu`** runs on the real hardware, and is verified: the original four
+  numbered kernels passed on 910B2, spread over devices 0–3. Tensor mode fully supports this host — the
   Pro-mode arch limit below does *not* apply.
 - **`sim`** is the Soc CAModel on CPU. No device needed, but its cycle counts are
   a **cost model, not a measurement**.
 
-Note that `perf` (phase 3) only works in `sim`: a device run writes compiled
-kernels and no performance data, so the phase reports `SKIP`. Real device
-profiling is reachable — `pypto.set_debug_options(runtime_debug_mode=1)` emits
-`tilefwk_L1_prof_data.json` (per-core task start/end, in ns),
-`merged_swimlane.json` and `bubble_analysis.log` — but it is a different shape
-from the simulator's report: task timings and waits, not per-pipe utilisation.
-So it cannot directly confirm or refute the simulator's `MTE_IN`-bound verdict;
-that would need msprof-level profiling. Nothing reads it yet.
+`PYPTO_RUN_MODE=sim ./run.sh perf` reads per-pipe counters from the simulator.
+Use `./run.sh profile` for measured device timings. It enables
+`runtime_debug_mode=1` and analyzes the device swimlane and per-core activity.
 
 Concurrent slots get one device each via `TILE_FWK_DEVICE_ID`
 (`PYPTO_DEVICES`, default `0,1,2,3,4,5,6,7`). Without that, pooled runs would
@@ -125,11 +183,10 @@ serialise on device 0 and the measured speed-up would be an artefact.
 
 ## Phase 1 — validate
 
-Runs each kernel in the Soc CAModel simulator (CPU, no NPU required) and gates on
-its self-check.
+Runs each kernel in the selected mode and checks its exit code and `PASS:` line.
 
 ```console
-$ ./run.sh validate
+$ PYPTO_RUN_MODE=sim ./run.sh validate examples/0{1,2,3}_*.py
 PASS  01_fused_elementwise   13.3s  (sim)
 PASS  02_row_softmax         15.1s  (sim)
 PASS  03_fused_linear        16.7s  (sim)
@@ -138,18 +195,17 @@ PASS  03_fused_linear        16.7s  (sim)
 Failures route through the Gate's `Bad` port instead of crashing the run:
 
 ```console
-$ ./run.sh validate runs/broken/01_wrong_math.py
-FAIL  01_wrong_math          rc=1  fused_elementwise mismatch
+$ ./run.sh validate fixtures/02_row_softmax_broken.py
 ```
 
 ### Concurrently, over a pool
 
 `./run.sh pool` runs the kernels at the same time. One actor never runs
 concurrently with *itself*, so real parallelism needs one worker chain per slot —
-`PYPTO_POOL` sets how many (default 3).
+`PYPTO_POOL` sets how many (default 4). Use five slots for the five default kernels.
 
 ```console
-$ ./run.sh pool
+$ ./run.sh pool examples/0{1,2,3}_*.py
 3/3 kernels passed  (slowest slot 17.2s vs 45.5s if run serially)
   PASS  01_fused_elementwise   13.3s  (slot 0)
   PASS  02_row_softmax         15.0s  (slot 1)
@@ -198,7 +254,7 @@ The sim run already writes a MachineModel report, per-pipe usage and a tile-op
 work profile. Phase 3 parses them and names the limiting pipe.
 
 ```console
-$ ./run.sh perf
+$ PYPTO_RUN_MODE=sim ./run.sh perf
 PASS  01_fused_elementwise     21,887 cycles  limited by MTE_IN (20.44%, memory-bound)
       next: MTE_OUT=1.88%, Vector=1.25%, Cube=0.0%
 PASS  02_row_softmax           19,006 cycles  limited by MTE_IN (7.84%, memory-bound)
@@ -212,8 +268,7 @@ vector-only kernels, as it should.
 
 > **These figures come from the simulator**, so they are a cost model's
 > prediction rather than a hardware measurement. Treat the *ranking* as the
-> signal and the absolute cycle counts as indicative. Run with
-> `PYPTO_RUN_MODE=npu` for real timings, and expect them to differ.
+> signal and the absolute cycle counts as indicative. Use `./run.sh profile` for device timings.
 
 ## Phase 4 — bounded repair loop
 
@@ -221,39 +276,14 @@ A loop in wfpy is an ordinary feedback edge with no backpressure, so it **must**
 terminate by itself. `Budget` is the only exit: a guarded action repairs while
 attempts remain, an unguarded fallback gives up.
 
-Transport defaults to `mock`, which makes termination observable offline — the
-mock reply is deliberately not a fix, so the loop runs to its budget:
-
-```console
-$ ./run.sh repair runs/broken/01_wrong_math.py
-[repair] transport=mock budget=2 skill=pypto-precision-debug
-[repair] attempt 1/2 on 01_wrong_math: fused_elementwise mismatch
-[repair] attempt 2/2 on attempt1: exited 0 but printed no PASS: line
-GAVE UP   after 2 attempt(s); last tried attempt2 -- exited 0 but printed no PASS: line
-```
-
-For a real repair via the `claude` ACP connector (**this spends tokens**):
+The repair agent uses the Claude ACP connector by default. For one repair attempt
+against the bundled broken softmax, install its adapter, sign in and run the fixture.
 
 ```bash
-./.venv/bin/pip install -e "/home/endrix/git/workflow/wfpy[agent]"   # once
-PYPTO_REPAIR_TRANSPORT=acp PYPTO_REPAIR_BUDGET=1 \
-    ./run.sh repair runs/broken/01_wrong_math.py
+npm install -g @anthropic-ai/claude-code @agentclientprotocol/claude-agent-acp
+claude
+PYPTO_REPAIR_BUDGET=1 ./run.sh repair fixtures/02_row_softmax_broken.py
 ```
-
-The `[agent]` extra is required: without it the ACP transport reaches
-`_invoke_agent_opencode_acp` and dies on `ModuleNotFoundError: No module named
-'acp'`. `PYPTO_REPAIR_BUDGET=1` caps the run at a single agent call.
-
-Two logging traps when checking whether a live agent really ran:
-
-- The banner always prints `provider=openai, model=gpt-4o`, whatever the
-  transport. It is wfpy's default model metadata, not evidence of the route
-  taken.
-- `wfpy plan` rewrites this file's `@agent` decorator into literals (see the
-  warning comment above it). A previous commit shipped a hardcoded
-  `transport="mock"` while the banner still printed `TRANSPORT`, so
-  `PYPTO_REPAIR_TRANSPORT=acp` reported the agent transport and ran the mock.
-  Re-read the decorator after any `./run.sh plan`.
 
 ### cannbot skills
 

@@ -1,15 +1,44 @@
 # PyPTO Tensor-mode examples (wfpy workflow building blocks)
 
-Three small, self-contained PyPTO kernels, each verified against a pure-torch
-reference. They are deliberately shaped as workflow nodes: one file, one kernel,
-a `--run_mode {sim,npu}` flag, a `PASS:`/`FAIL:` line on stdout, and exit code
-0/1 so a runner can gate on them.
+Each example runs as a standalone kernel with `--run_mode sim` or
+`--run_mode npu`. Its exit code and `PASS:` or `FAIL:` line carry the result
+back to the workflow.
 
 | File | Kernel | Units exercised |
 |---|---|---|
 | `01_fused_elementwise.py` | `relu(a * b + c)` | vector only |
 | `02_row_softmax.py` | `softmax(x, dim=-1)` | vector + reduction (tile spans the full row) |
 | `03_fused_linear.py` | `relu(a @ b + bias)` | cube matmul + vector tail |
+| `04_layer_norm.py` | Layer normalization | vector + row reductions |
+| `05_attention_block.py` | Attention and feed-forward block | cube matmuls + vector |
+| [kda_decay_matrix_verified.py](kda_decay_matrix_verified.py) | KDA decayed Gram matrix | tiled feature reduction + masking |
+
+## Verified KDA kernel
+
+The workflow selected `candidate2.py` in run
+`2026-11-25T08-50-46-923Z_64bf5633`. The example is a byte-for-byte copy
+of `custom/kda_decay_matrix_codex/76688438f86f43f2b739d47b6b6ab1b9/candidates/candidate2.py`.
+Its SHA-256 is `86a898aabbb4d4963ed32467d04bf7856f289060db85f80c7153f71748b226a4`.
+
+| Metric | Authored baseline | Selected kernel |
+|---|---:|---:|
+| Simulator cycles, 128 × 64 | 4,497,456 | 918,106 (79.6% lower) |
+| Median synchronized NPU latency | 4.094 ms | 3.303 ms (19.3% lower) |
+
+The selected kernel passed all five correctness fixtures on Ascend 910B2 device 0.
+Its largest absolute error against the FP64 reference was `2.85765e-6`.
+The timing used seed 0, the diagonal included, three warmups and ten timed
+calls at 128 × 64. The baseline timing came from a separate device evaluation
+with the same fixture and timing procedure.
+
+To run the example’s standalone wide-decay self-check on an Ascend host:
+
+```bash
+source /usr/local/Ascend/ascend-toolkit/set_env.sh
+TILE_FWK_DEVICE_ID=0 .venv/bin/python examples/kda_decay_matrix_verified.py --run_mode npu
+```
+
+The [full KDA workflow](../README.md#kda-workflow) runs all five fixtures and times the selected kernel.
 
 ## Why Tensor mode and not Pro mode
 
@@ -56,11 +85,6 @@ and that registration collides; `TORCH_DEVICE_BACKEND_AUTOLOAD=0` plus an
 explicit `import torch_npu` fails the same way. Note a broken `torch_npu` breaks
 **simulator** runs too, because plain `import torch` triggers the autoload.
 
-Docker is not needed for device execution. If these pins ever stop resolving,
-three venvs on this machine already run the working pair and are the reference:
-`pto-kernels/.venv`, `pto-mlir-cannbench/.venv` (2.9.0) and
-`workflow/old_wfpy/.venv` (2.10.0).
-
 Note the installed package is pypto **0.2.1** (from CANN 9.2.0-beta.2), while the
 `pro/` source tree is 0.3.0. Do not put `pro/python` on `PYTHONPATH` to "upgrade"
 it: the 0.3.0 Python calls into a newer pybind binding and fails on import with
@@ -75,8 +99,6 @@ trace and bubble-analysis report under `./output/`.
 source /usr/local/Ascend/ascend-toolkit/set_env.sh
 ./.venv/bin/python examples/01_fused_elementwise.py --run_mode sim
 ```
-
-All four pass in both modes.
 
 `--run_mode npu` runs on the real hardware; it reads `TILE_FWK_DEVICE_ID` to pick
 a device (the box has 8x 910B2). A device run writes compiled kernels but no
