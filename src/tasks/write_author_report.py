@@ -58,7 +58,9 @@ class WriteAuthorReport:
                 present.append(f"| {stage} | `{name}` | skipped this round |")
                 continue
             size = path.stat().st_size if path.is_file() else 0
-            if size < MIN_ARTIFACT_BYTES:
+            gate = ws / f"brief_after_{stage}.md"
+            accepted = gate.is_file() and gate.read_text().startswith(f"Stage OK    {stage}:")
+            if not accepted or size < MIN_ARTIFACT_BYTES:
                 missing.append(stage)
             present.append(f"| {stage} | `{name}` | {size or '—'} |")
 

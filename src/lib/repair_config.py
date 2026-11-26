@@ -15,6 +15,7 @@ BUDGET = int(os.environ.get("PYPTO_REPAIR_BUDGET", "2"))
 # transport, but not a stand-in.
 TRANSPORT = os.environ.get("PYPTO_REPAIR_TRANSPORT", "acp")
 CONNECTOR = os.environ.get("PYPTO_REPAIR_CONNECTOR", "claude")
+MODEL = os.environ.get("PYPTO_REPAIR_MODEL", "")
 IS_ACP = TRANSPORT == "acp"
 # A full-file rewrite takes longer than wfpy's 2-minute default.
 TIMEOUT_MS = int(os.environ.get("PYPTO_REPAIR_TIMEOUT_MS", "600000"))

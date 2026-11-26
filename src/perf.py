@@ -4,8 +4,7 @@
 
     "Kernel" --> Prepare --> RunSim --> CollectPerf --> AnalyzePerf --> "Report"
 
-Only works in sim mode: a device run writes compiled kernels and no performance
-data, so this reports SKIP on hardware.
+This workflow pins simulator mode to collect the MachineModel counters on every host.
 
 Run:
     ./run.sh perf [kernel.py ...]
@@ -19,7 +18,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.lib import cann  # noqa: E402
-from src.lib.runner import WF_OUT, default_run_mode  # noqa: E402
+from src.lib.runner import WF_OUT  # noqa: E402
 from src.tasks.analyze_perf import AnalyzePerf  # noqa: E402
 from src.tasks.collect_perf import CollectPerf  # noqa: E402
 from src.tasks.prepare import Prepare  # noqa: E402
@@ -38,7 +37,7 @@ DEFAULT_KERNELS = [
 @workflow(inputs={"Kernel": str}, outputs={"Report": str})
 def analyze_perf() -> None:
     """Wire the four perf phases together."""
-    prepare = Prepare(run_mode=default_run_mode(), dump_ir=False)
+    prepare = Prepare(run_mode="sim", dump_ir=False)
     runner = RunSim()
     collect = CollectPerf()
     analyze = AnalyzePerf()

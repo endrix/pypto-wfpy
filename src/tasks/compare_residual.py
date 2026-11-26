@@ -23,7 +23,8 @@ class CompareResidual:
     def compare(self, row, split):
         records = {name: json.loads(Path(str(token)).read_text())
                    for name, token in zip(BRANCHES, (row, split))}
-        kernels = {name: r["kernel"] for name, r in records.items() if r["status"] == "PASS"}
+        eligible = {"PASS", "BASELINE VERIFIED", "VERIFIED KERNEL, TUNING INCOMPLETE"}
+        kernels = {name: r["kernel"] for name, r in records.items() if r["status"] in eligible}
         workspace = Path(self.workspace)
         workspace.mkdir(parents=True, exist_ok=True)
         details = ""

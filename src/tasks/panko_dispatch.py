@@ -8,6 +8,7 @@ from pathlib import Path
 import subprocess
 from tempfile import NamedTemporaryFile
 
+from src.lib.device_tune import compare_kda_pair, measure
 from src.lib import panko
 from src.lib.agent_io import read_json
 from src.lib.skill_paths import ops_root
@@ -73,20 +74,33 @@ class PankoDispatch:
                        if line.startswith("NPU latency: median ")), None)
         if timing is None:
             raise ValueError(f"Missing final timing in {logs}")
+        selected = root / "winner.py"
         comparison = ""
+        pending = panko.pending_refinement(root, progress)
+        if pending is not None:
+            try:
+                pending_logs = Path(panko.verify_winner(root, state, candidate=pending))
+            except panko.FinalCheckFailed as exc:
+                comparison = f"\n\nPending refinement `{pending}` was ineligible. {exc}"
+            else:
+                challenger = pending_logs / "winner.py"
+                adopt, evidence = compare_kda_pair(selected, challenger, pending_logs / "paired", self.device)
+                if adopt:
+                    selected = challenger
+                comparison = (f"\n\nPending refinement: `{pending}` "
+                              f"({progress['refine']['best']['p']} µs profiled). Passed all five NPU fixtures. "
+                              f"Paired timings (harness winner → pending): {evidence}")
+        comparison += f"\n\nRecommended deployment kernel: `{selected}`."
         rival = os.environ.get("PYPTO_PANKO_COMPARE_KERNEL")
         if rival:
-            from src.lib.device_tune import measure, paired_verdict
-
             adapter = "src.lib.device_tune_kda"
             device = state["manifest"]["device"]
             candidate = Path(rival).resolve()
             directory = Path(logs) / "comparison"
             measure("verify", adapter, device, directory / "rival-check", candidate)
-            result = measure("paired", adapter, device, directory / "paired", candidate, root / "winner.py")
-            faster, evidence = paired_verdict(json.loads((result / "pairs.json").read_text()))
-            comparison = (f"\n\nPaired comparison with `{candidate}`: {evidence}. "
-                          f"Selected: {'PANKO winner' if faster else 'comparison kernel'}. Samples: `{result}`.")
+            faster, evidence = compare_kda_pair(candidate, selected, directory / "paired", device)
+            comparison += (f"\n\nPaired comparison with `{candidate}`: {evidence} "
+                           f"Selected: `{selected if faster else candidate}`.")
         return self._report(True, f"Stop reason: {progress['stop_reason']}\n\n"
                             f"NPU AICore latency: {progress['preopt_us']} → "
                             f"{progress['best_latency_us']} µs. Evaluations charged: {progress['evals_used']}.\n\n"

@@ -24,7 +24,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.lib import cann  # noqa: E402
-from src.lib.runner import WF_OUT, default_run_mode  # noqa: E402
+from src.lib.runner import DEVICES, WF_OUT, default_run_mode  # noqa: E402
 from src.tasks.dispatch import make_dispatch  # noqa: E402
 from src.tasks.join import make_join  # noqa: E402
 from src.tasks.pool_summary import PoolSummary  # noqa: E402
@@ -39,6 +39,11 @@ DEFAULT_KERNELS = [
     "examples/05_attention_block.py",
 ]
 POOL = int(os.environ.get("PYPTO_POOL", "4"))
+
+if POOL < 1:
+    raise ValueError("PYPTO_POOL must be positive")
+if default_run_mode() == "npu":
+    POOL = min(POOL, len(DEVICES) or 1)
 
 Dispatch = make_dispatch(POOL)
 Join = make_join(POOL)
@@ -66,15 +71,12 @@ def main() -> int:
     # set_env.sh, a direct launch from an IDE does not.
     cann.apply_to_process()
     kernels = sys.argv[1:] or DEFAULT_KERNELS
-    if len(kernels) > POOL:
-        print(f"error: {len(kernels)} kernels but PYPTO_POOL={POOL}", file=sys.stderr)
-        return 2
     result = run(validate_pool, inputs={"Kernels": kernels}, max_workers=POOL,
                  out_dir=str(WF_OUT))
     lines = result["Out"] or []
     # The join emits a snapshot per arrival; the last one is the most complete.
     print(lines[-1] if lines else "(no output)")
-    return 1 if not lines or "FAIL" in lines[-1] else 0
+    return 0 if lines and lines[-1].startswith(f"{len(kernels)}/{len(kernels)} kernels passed") else 1
 
 
 if __name__ == "__main__":

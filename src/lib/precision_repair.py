@@ -6,7 +6,6 @@ import ast
 from dataclasses import dataclass, replace
 import difflib
 import json
-import math
 import os
 from pathlib import Path
 import re
@@ -56,17 +55,15 @@ def checkpoint_table(reference, suspect) -> tuple[list[str], str]:
             "| Op magic | Reference op, shape and dtype | Suspect op, shape and dtype | Comparison |",
             "|---:|---|---|---|"]
     first = ""
-    for magic in sorted(reference.keys() | suspect.keys(), key=int):
+    diffs = verify.compare(reference, suspect)
+    culprit = verify.first_divergence(diffs)
+    for row in diffs:
+        magic = row.magic
         ref, sus = reference.get(magic), suspect.get(magic)
         lhs = f"{ref.opcode} {ref.shape} {ref.dtype}" if ref else "missing"
         rhs = f"{sus.opcode} {sus.shape} {sus.dtype}" if sus else "missing"
-        if lhs != rhs:
-            different, comparison = True, "structural difference"
-        else:
-            row, = verify.compare({magic: ref}, {magic: sus})
-            different = row.comparable and (not math.isfinite(row.max_abs) or row.max_abs > verify.AGREE_ATOL)
-            comparison = f"max abs {row.max_abs:.6g}" if row.comparable else row.note
-        if different and not first:
+        comparison = row.note or f"max abs {row.max_abs:.6g}"
+        if row is culprit:
             first = f"{magic} ({lhs} vs {rhs}, {comparison})"
         rows.append(f"| {magic} | {lhs} | {rhs} | {comparison} |")
     return rows, first

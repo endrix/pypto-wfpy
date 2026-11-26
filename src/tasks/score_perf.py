@@ -45,6 +45,8 @@ class ScorePerf:
     _best_cycles: float = 0.0
     _best_kernel: str = ""
     _best_perf: Any = None  # PerfData of the incumbent, for the request
+    _baseline_kernel: str = ""
+    _baseline_dir: str = ""
     _baseline_cycles: float = 0.0
     # A string, not a list: an annotated field with a default becomes per-actor
     # state, and a mutable default would be one object shared by every instance.
@@ -120,6 +122,8 @@ class ScorePerf:
             self._best_cycles, self._best_kernel = cycles, kernel
             self._best_perf = perf
             self._baseline_cycles = cycles
+            self._baseline_kernel = kernel
+            self._baseline_dir = perf.result.job.work_dir
             self._note(kernel, cycles, "baseline")
             return cycles, True
 
@@ -251,12 +255,14 @@ class ScorePerf:
 
     def _finish(self, tag: str, perf: PerfData) -> SearchResult:
         winner = self._best_perf or perf
-        result = SearchResult(self._verdict(tag), winner.result.job.work_dir, self._best_kernel)
+        result = SearchResult(self._verdict(tag), winner.result.job.work_dir, self._best_kernel,
+                              baseline_kernel=self._baseline_kernel, baseline_cycles=self._baseline_cycles,
+                              baseline_dir=self._baseline_dir)
         # wfpy reuses the nested actor when the outer graph starts a new design.
         self._rounds = self._repairs = 0
         self._best_cycles = self._baseline_cycles = 0.0
         self._best_perf = None
-        self._best_kernel = self._history = ""
+        self._best_kernel = self._baseline_kernel = self._baseline_dir = self._history = ""
         return result
 
     # ---- actions --------------------------------------------------------

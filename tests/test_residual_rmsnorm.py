@@ -80,7 +80,13 @@ class ResidualTest(unittest.TestCase):
             stack.enter_context(patch.object(launcher, "REPO_ROOT", workspace))
             stack.enter_context(patch("wfpy.runner._invoke_agent", side_effect=respond))
             stack.enter_context(patch("src.tasks.residual_verify.measure"))
-            stack.enter_context(patch("src.tasks.device_tune_round.measure"))
+            def measure(phase, adapter, device, directory, *kernels):
+                directory.mkdir(parents=True)
+                if phase == "reference":
+                    (directory / "pairs.json").write_text(json.dumps([[1] * 10, [2] * 10]))
+                return directory
+
+            stack.enter_context(patch("src.tasks.device_tune_round.measure", side_effect=measure))
             stack.enter_context(patch("src.tasks.device_tune_round.device_profile", side_effect=profile))
             stack.enter_context(patch("src.tasks.compare_residual.run_comparison", side_effect=compare))
             result = run(launcher.residual_rmsnorm, out_dir=workspace / "wf-out")

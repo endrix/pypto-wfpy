@@ -7,7 +7,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from src.lib.records import Divergence
-from src.lib.runner import REPO_ROOT
 from wfpy import File, Port, action, task
 
 
@@ -30,7 +29,7 @@ class WriteTriageReport:
     @action(consumes={"Divergence": 1},
             produces={"Report": 1, "Brief": 1, "Verdict": 1})
     def write(self, div: Divergence) -> dict:
-        out_dir = REPO_ROOT / "runs" / "triage"
+        out_dir = Path(div.suspect).parent
         out_dir.mkdir(parents=True, exist_ok=True)
         path = out_dir / "triage.md"
 
@@ -49,12 +48,13 @@ class WriteTriageReport:
             table.append(f"| {d.magic} | {d.opcode} | {d.shape} | {d.max_abs:.6f} | {mark} |")
 
         if div.error:
-            headline = f"TRIAGE FAILED  {div.error}"
+            headline = f"INCONCLUSIVE  {div.error}"
         elif div.localized:
             c = div.culprit
-            headline = f"CULPRIT  op {c.magic} {c.opcode} {c.shape} (max abs diff {c.max_abs:.6f})"
+            detail = c.note or f"max abs diff {c.max_abs:.6f}"
+            headline = f"CULPRIT  op {c.magic} {c.opcode} {c.shape} ({detail})"
         else:
-            headline = "NO DIVERGENCE  every aligned op agrees; the two builds compute the same thing"
+            headline = "NO DIVERGENCE  all captured checkpoints agree within tolerance"
 
         lines = [
             "# Precision triage", "",
@@ -74,7 +74,7 @@ class WriteTriageReport:
             "Opcodes are tile-level primitives, so one source line becomes several:",
             "a `pypto.softmax` lowers to ROWMAX_SINGLE, SUB, EXP, ROWSUM_SINGLE, DIV.",
             "",
-            "Ops before the first divergence are bit-identical between the two",
+            "Comparable ops before the first divergence agree within tolerance between the two",
             "builds, which is what makes the localisation a fact rather than a guess.",
         ]
         path.write_text("\n".join(lines) + "\n", encoding="utf-8")

@@ -44,9 +44,8 @@ from typing import Callable
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from src.agents.redesign_advisor import make_redesign_advisor  # noqa: E402
-from src.lib.runner import REPO_ROOT
 from src.lib.author_config import KDA_CONTRACT
-from src.lib.combo_config import OUTER_BUDGET  # noqa: E402
+from src.lib.combo_config import OUTER_BUDGET, kda_verification  # noqa: E402
 from src.tasks.merge_brief import MergeBrief  # noqa: E402
 from src.tasks.outer_score import OuterScore  # noqa: E402
 from src.tasks.route_authored import RouteAuthored  # noqa: E402
@@ -60,7 +59,7 @@ from wfpy import File, connect, workflow  # noqa: E402
 def combo_flow(op: str, workspace: str, torch_source: str, **agent_options: str) -> Callable[[], None]:
     """Build the author-then-optimise loop for one operator."""
 
-    kda = Path(torch_source).resolve() == REPO_ROOT / "torch_src/kda_decay_matrix.py"
+    kda = kda_verification()
 
     @workflow(
         inputs={"Source": File(ext=".py")},

@@ -6,7 +6,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.lib.records import RunResult
 from src.lib.runner import LOCK
 from wfpy import Port, action, task
 
@@ -18,15 +17,15 @@ def make_join(pool: int) -> type:
     fires once and the other tokens are stranded with no diagnostic. One port and
     one action per source is the idiom that actually collects every result.
     """
-    ports: dict[str, Any] = {f"R{i}": Port[RunResult](direction="in") for i in range(pool)}
+    ports: dict[str, Any] = {f"R{i}": Port[list](direction="in") for i in range(pool)}
     ports["Results"] = Port[list](direction="out")
 
     def _mk(i: int) -> Any:
-        def take(self: Any, result: RunResult) -> dict:
+        def take(self: Any, result: list) -> dict:
             # A module-level Lock, not a state field: task state is snapshotted
             # per firing for checkpointing and a Lock is not picklable.
             with LOCK:
-                self._seen = list(self._seen) + [result]
+                self._seen = list(self._seen) + result
                 snapshot = list(self._seen)
             return {"Results": snapshot}
 

@@ -73,7 +73,7 @@ _requested = _requested_kernel()
 KERNEL_PATH = _requested if Path(_requested).is_absolute() else str(REPO_ROOT / _requested)
 
 
-@workflow(inputs={}, outputs={"Out": File(ext=".md")})
+@workflow(inputs={}, outputs={"Out": File(ext=".md"), "Report": File(ext=".md"), "Verdict": str})
 def optimize_kernel() -> None:
     """Three nodes: where the kernel comes from, the search, and the report."""
     kernel = KernelSource(path=File(KERNEL_PATH))
@@ -83,6 +83,8 @@ def optimize_kernel() -> None:
 
     connect(kernel.Out, search.Kernel)
     connect(search.Report, report.In)
+    connect(search.Report, "Report")
+    connect(search.Verdict, "Verdict")
     connect(search.Advice, advice.In)
     connect(search.Advice, "Out")
 
@@ -116,10 +118,9 @@ def main() -> int:
     # "Out" is a .md path, not the text: see the advisor's port declaration.
     for token in result["Out"] or []:
         print(agent_io.read_text(token))
-    # The search always terminates with a best-so-far, so the exit code reports
-    # whether the run produced advice at all, not whether it found a speedup --
-    # "no gain" is a legitimate, informative outcome.
-    return 0 if result["Out"] else 1
+    verdicts = result["Verdict"] or []
+    return 0 if verdicts and all(v in ("OPTIMIZED", "NO GAIN") for v in verdicts) else 1
+
 
 
 if __name__ == "__main__":

@@ -13,6 +13,8 @@ from pathlib import Path
 import signal
 import subprocess
 import sys
+from tempfile import mkdtemp
+from uuid import uuid4
 import threading
 import time
 
@@ -111,8 +113,15 @@ def make_job(kernel: str, run_mode: str, suffix: str = "", slot: int = 0,
     if not path.is_absolute():
         path = REPO_ROOT / path
     name = path.stem
-    work_dir = work_dir or REPO_ROOT / "runs" / f"{name}{suffix}"
-    work_dir.mkdir(parents=True, exist_ok=True)
+    if work_dir is None:
+        root = REPO_ROOT / "runs" / f"{name}{suffix}"
+        root.mkdir(parents=True, exist_ok=True)
+        work_dir = Path(mkdtemp(prefix="run-", dir=root))
+        pointer = root / f".latest-{uuid4().hex}"
+        pointer.symlink_to(work_dir.name, target_is_directory=True)
+        pointer.replace(root / "latest")
+    else:
+        work_dir.mkdir(parents=True, exist_ok=True)
     if via_ir_runner:
         cmd = (PYTHON, str(IR_RUNNER), str(path), "--run_mode", run_mode)
     else:

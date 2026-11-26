@@ -12,7 +12,7 @@ from src.lib.author_config import MAX_INLINE, MIN_ARTIFACT_BYTES
 from wfpy import File, Port, action, task
 
 
-def stage_gate(stage: str, artifact: str, next_brief: str, *, invalidate_rejected: bool = False) -> type:
+def stage_gate(stage: str, artifact: str, next_brief: str) -> type:
     """Build the gate that follows one authoring stage.
 
     This is the orchestrator's only real job -- "⛔ 核查规则：子技能声明的所有分析
@@ -51,7 +51,7 @@ def stage_gate(stage: str, artifact: str, next_brief: str, *, invalidate_rejecte
 
             size = source.stat().st_size if source.is_file() else 0
             syntax_error = ""
-            if invalidate_rejected and size and target.suffix == ".py":
+            if size and target.suffix == ".py":
                 try:
                     compile(source.read_bytes(), str(source), "exec", dont_inherit=True)
                 except SyntaxError as exc:
@@ -71,7 +71,7 @@ def stage_gate(stage: str, artifact: str, next_brief: str, *, invalidate_rejecte
             else:
                 verdict = f"MISSING  {stage}: produced no {name}"
 
-            if invalidate_rejected and (syntax_error or size < MIN_ARTIFACT_BYTES):
+            if syntax_error or size < MIN_ARTIFACT_BYTES:
                 # A later design must never inherit an earlier design’s accepted file.
                 target.unlink(missing_ok=True)
 

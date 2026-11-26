@@ -14,11 +14,8 @@ from wfpy import File, Port, action, task
 class WriteOptReport:
     """Write what the search found, and hand the same facts to the advisor.
 
-    Two outputs from one firing because they are the same content read two
-    ways: `Report` is the file a person opens, `Analysis` is the prompt the
-    advisor agent answers. Deriving the prompt here keeps the agent off the
-    loop's critical path -- it is asked once, at the end, about a result that
-    is already final.
+    The deterministic verdict goes to the launcher. The report and the
+    advisor's brief include the same measured result and search history.
     """
 
     directory: str
@@ -26,9 +23,10 @@ class WriteOptReport:
     class Ports:
         Result = Port[SearchResult](direction="in")
         Report = Port[File](direction="out", ext=".md")
+        Verdict = Port[str](direction="out")
         Analysis = Port[str](direction="out")
 
-    @action(consumes={"Result": 1}, produces={"Report": 1, "Analysis": 1})
+    @action(consumes={"Result": 1}, produces={"Report": 1, "Analysis": 1, "Verdict": 1})
     def write(self, result: SearchResult) -> dict:
         out_dir = Path(self.directory)
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -65,7 +63,7 @@ class WriteOptReport:
             f"{verdict.strip()}\n\nCandidates tried:\n{history.rstrip()}\n\n"
             f"Measurement directory: {result.measurement_dir}\n{perf_md}\n\n{bubble_md}\n{result.npu_report}"
         )
-        return {"Report": str(path), "Analysis": analysis}
+        return {"Report": str(path), "Analysis": analysis, "Verdict": verdict.partition("  ")[0]}
 
     @staticmethod
     def _collect(run_dir: Path) -> tuple[str, str]:

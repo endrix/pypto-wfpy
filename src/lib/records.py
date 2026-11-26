@@ -34,7 +34,7 @@ class JobSpec:
     def has_pass_marker(self, stdout: str) -> bool:
         if self.phase:
             return f"PASS: KDA {self.phase}" in stdout.splitlines()
-        return "PASS:" in stdout
+        return any(line.startswith("PASS:") for line in stdout.splitlines())
 
 
 @dataclass(frozen=True)
@@ -141,6 +141,9 @@ class SearchResult:
     measurement_dir: str
     kernel: str = ""
     npu_report: str = ""
+    baseline_kernel: str = ""
+    baseline_cycles: float = 0.0
+    baseline_dir: str = ""
 
 
 @dataclass(frozen=True)
@@ -164,6 +167,7 @@ class OpDiff:
     max_abs: float
     comparable: bool
     note: str = ""
+    structural: bool = False
 
 
 @dataclass(frozen=True)

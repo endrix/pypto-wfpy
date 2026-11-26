@@ -78,6 +78,6 @@ class DeviceTuningTest(unittest.TestCase):
 
     def test_unsuccessful_edit_exhausts_the_budget(self):
         _, _, result = self.run_loop([{"action": "edit", "evidence": "missing edit"}])
-        self.assertEqual(result["Status"], ["FAILED"])
+        self.assertEqual(result["Status"], ["BASELINE VERIFIED"])
         self.assertIn("REJECTED", Path(str(result["Report"][0])).read_text())
         self.assertIn("TILE = 8", Path(str(result["Winner"][0])).read_text())

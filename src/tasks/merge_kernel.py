@@ -4,6 +4,9 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+from src.lib.frozen_fixture import bind_fixture
+from src.lib.runner import REPO_ROOT
 from wfpy import Port, action, task
 
 
@@ -23,21 +26,23 @@ class MergeKernel:
     join is visible in the graph instead of hidden inside a task.
     """
 
-    _n: int = 0
+    freeze_fixture: bool
+    _fixture: str = ""
 
     class Ports:
         Initial = Port[str](direction="in")
         Retry = Port[str](direction="in")
         Out = Port[str](direction="out")
 
-    def _forward(self, kernel: str) -> str:
-        self._n += 1
-        return str(kernel)
-
     @action(consumes={"Initial": 1}, produces={"Out": 1})
     def from_initial(self, kernel: str) -> str:
-        return self._forward(kernel)
+        path = REPO_ROOT / str(kernel)
+        if self.freeze_fixture and path.is_file():
+            self._fixture = path.read_text()
+        return str(kernel)
 
     @action(consumes={"Retry": 1}, produces={"Out": 1})
     def from_retry(self, kernel: str) -> str:
-        return self._forward(kernel)
+        if self.freeze_fixture:
+            return bind_fixture(self._fixture, str(kernel))
+        return str(kernel)

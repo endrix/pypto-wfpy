@@ -89,3 +89,10 @@ def paired_verdict(samples):
     reason = (f"{median(baseline):.3f} → {median(candidate):.3f} ms; median paired "
               f"gain {gain:.2f}%, {wins}/10 wins")
     return gain >= 1 and wins >= 9, reason
+
+
+def compare_kda_pair(incumbent: Path, challenger: Path, directory: Path, device: int):
+    """Time two independently verified, uninstrumented KDA implementations."""
+    result = measure("paired", "src.lib.device_tune_kda", device, directory, incumbent, challenger)
+    adopted, evidence = paired_verdict(json.loads((result / "pairs.json").read_text()))
+    return adopted, f"{evidence}. Raw samples: `{result / 'pairs.json'}`."

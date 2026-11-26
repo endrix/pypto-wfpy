@@ -57,6 +57,7 @@ must re-collect their own data on entry rather than reuse this baseline.
 from __future__ import annotations
 
 from pathlib import Path
+from uuid import uuid4
 import sys
 from typing import Callable
 
@@ -88,6 +89,7 @@ def make_optimize_flow(*, workspace: str = "", kda_op: str = "", **agent_options
         outputs={
             "Report": File(ext=".md"),
             "Advice": File(ext=".md"),
+            "Verdict": str,
             # Carried out so a caller can SEE the run, not only read about it: the
             # simulator's trace and the compiler's four IR levels.
             "Swimlane": File(ext=".json"),
@@ -97,7 +99,7 @@ def make_optimize_flow(*, workspace: str = "", kda_op: str = "", **agent_options
     )
     def optimize_flow() -> None:
         """Measure, decide, edit, re-measure -- with a gate and a doctor."""
-        merge = MergeKernel()
+        merge = MergeKernel(freeze_fixture=not bool(kda_op))
         simulate = SimulateKda(workspace=workspace, op=kda_op) if kda_op else simulate_flow()
         analyze = analyze_flow()
         score = ScorePerf(budget=BUDGET)
@@ -106,7 +108,7 @@ def make_optimize_flow(*, workspace: str = "", kda_op: str = "", **agent_options
         gate = ArtifactGate()
         applier = make_tune_applier(**agent_options)()
         doctor = make_tile_doctor(cli_tools_mode=tools_mode, **agent_options)()
-        output = Path(workspace) if workspace else REPO_ROOT / "runs"
+        output = Path(workspace) if workspace else REPO_ROOT / "runs/optimize" / uuid4().hex
         summary_file = WriteViewerText(directory=str(output / "viewers"), label="Summary")
         summary_view = MarkdownViewer()
         perf_report_view = MarkdownViewer()
@@ -154,6 +156,7 @@ def make_optimize_flow(*, workspace: str = "", kda_op: str = "", **agent_options
         else:
             connect(score.Result, writer.Result)
         connect(writer.Report, "Report")
+        connect(writer.Verdict, "Verdict")
         connect(writer.Analysis, advisor.Analysis)
         connect(advisor.Advice, "Advice")
 

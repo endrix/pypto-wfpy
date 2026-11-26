@@ -66,13 +66,13 @@ class DeviceTuneRound:
             return self._finish("FAILED", "The selected kernel changed outside the measured edit.")
         if stop or (self._round and self._round >= self.budget):
             if not stop and not self._compared:
-                return self._finish("FAILED", "No challenger completed evaluation before the budget expired.")
+                return self._finish("BASELINE VERIFIED", "No challenger completed evaluation before the budget expired.")
             return self._finish("PASS", stop or "Search budget reached.")
         directory = Path(self._directory) / f"round-{self._round + 1}"
         try:
             report, trace, names = self._profile(incumbent, directory / "incumbent-profile")
         except (OSError, ValueError, KeyError) as exc:
-            return self._finish("FAILED", f"Fresh incumbent profile unavailable. {exc}")
+            return self._finish("VERIFIED KERNEL, TUNING INCOMPLETE", f"Fresh incumbent profile unavailable. {exc}")
         self._history += f"\nIncumbent profile: `{report}`\n"
         files = {"Trace": str(trace), "Profile": str(report)}
         if self.budget == 0:
@@ -107,6 +107,15 @@ class DeviceTuneRound:
             self._check(baseline, directory / "baseline-check")
         except (OSError, ValueError) as exc:
             return self._finish("FAILED", f"Baseline verification failed. {exc}")
+        if self.adapter == "src.lib.residual_eval":
+            try:
+                timing = measure("reference", self.adapter, self.device, directory / "unfused", baseline)
+                samples = json.loads((timing / "pairs.json").read_text())
+                _, evidence = paired_verdict(samples)
+            except (OSError, ValueError) as exc:
+                return self._finish("VERIFIED KERNEL, TUNING INCOMPLETE", f"Unfused comparison failed. {exc}")
+            self._history += (f"Unfused PyTorch versus authored kernel, synchronized NPU calls: {evidence}. "
+                              f"Samples: {timing / 'pairs.json'}. Consider launch and wrapper overhead.\n")
         return self._next()
 
     def _apply(self, token, stage):

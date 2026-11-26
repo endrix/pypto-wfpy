@@ -44,7 +44,7 @@ PYPTO_COMBO_CONNECTOR=claude PYPTO_COMBO_MODEL=sonnet ./run.sh kda
 Set these variables in the IDE process environment before opening the workflow.
 The CLI writes journals to `wf-out/` by default. For the same output location
 as the first command, select `src/wf-out` in the IDE's run output setting.
-Each run keeps its authoring documents, candidates and evaluation logs under
+Standalone authoring and KDA use a fresh workspace per run. Each KDA run keeps its authoring documents, candidates and evaluation logs under
 `custom/kda_decay_matrix/<workspace-id>/`. In the IDE, the `combo` graph has a viewer connected to the author’s
 `Verdict` output. Its `search` graph has viewers for the analysis node’s
 `Summary`, `PerfReport` and `BubbleReport` outputs.
@@ -58,6 +58,16 @@ are included as a reproducible example.
 | Simulator smoke check per candidate | `(17, 7)` with the diagonal and `(2, 1)` with a wide gate step and strict lower mask | 900 s | `PYPTO_KDA_SMOKE_TIMEOUT_S` |
 | Simulator score per candidate | `(128, 64)`, seed 0, diagonal included, cumulative gates | 1800 s | `PYPTO_KDA_SCORE_TIMEOUT_S` |
 | Final selected kernel on NPU | Five correctness fixtures, then synchronized end-to-end latency on `(128, 64)` with three warmups and ten measured calls | 1800 s | `PYPTO_KDA_FINAL_TIMEOUT_S` |
+
+The KDA entry point uses the KDA fixtures for every source path, including copies
+of the Torch operator. For a different operator that uses its own standalone
+self-check, explicitly set `PYPTO_COMBO_VERIFICATION=generic`.
+
+When simulation selects a different kernel, the workflow verifies both the
+starting kernel and the finalist on the NPU. Ten alternating timing pairs
+decide deployment. The finalist needs nine wins and a median paired gain of
+at least 1%. The final report records the selected source, simulator result,
+hardware measurements and raw samples.
 
 Both Python artifacts must compile before their fixtures run. On failure the
 owning author receives the diagnostic and one retry. A second golden failure
@@ -141,13 +151,13 @@ The workflow alternates the incumbent and candidate in ten timing pairs with
 profiling off. Adoption requires at least nine wins and a median paired gain of
 at least 1%. The IDE shows the profile, trace, source diff and verdict. Set
 `PYPTO_DEVICE_TUNE_BUDGET` to the maximum number of edits (default 3), or to
-0 for a baseline verification and profile. Workspaces are in `custom/device_tune/`.
+0 for a baseline verification and profile. A verified starting kernel remains eligible when every proposed edit is rejected. Workspaces are in `custom/device_tune/`.
 
 **Competing residual RMSNorm designs.** A planner gives two designers the same
 FP32 contract for `(normalized, residual_sum)`. One branch reuses the elementwise
 residual sum across normalization and the other splits the feature reduction. Each gets its own
 verification brief, implementation, one authoring retry, and the same NPU-tuning
-budget. The final comparison rotates the two candidates and unfused PyTorch on
+budget. Before proposing edits, each tuner receives measured paired timings for its authored kernel and unfused PyTorch. The final comparison rotates the two candidates and unfused PyTorch on
 one device, at 64 × 128 and a held-out 37 × 160. A candidate must win at least
 nine of twelve rounds and improve median latency by at least 2% on **both**
 shapes. Unfused PyTorch can win. Branch artifacts and the comparison report
@@ -187,7 +197,11 @@ The default budget is six charged evaluations including the baseline. The
 vendor objective is **AICore microseconds with profiling enabled**. Before
 publishing a winner, the workflow checks the harness stop marker, source hash
 and best measured node, disables the profiler in a delivery copy, and runs the
-five fixtures and synchronized end-to-end timing on the NPU. To compare with
+five fixtures and synchronized end-to-end timing on the NPU. If the budget
+expires with a distinct, scored refinement pending, the workflow checks its
+snapshot hash and correctness and compares it against the harness winner in
+ten paired calls. The report names the recommended deployment kernel and retains
+the vendor-delivered source. To compare with
 another KDA run, set `PYPTO_PANKO_COMPARE_KERNEL` to that run's selected Python
 file. The report includes ten paired end-to-end measurements against it. Use
 the same seed kernel and record each search budget when comparing strategies.
@@ -214,7 +228,17 @@ verdict to `src/wf-out/<run-id>/Out.md`.
 A separate final check of that PANKO candidate passed all five NPU fixtures.
 With profiling off at 128 × 64, its median synchronized call took 3.406 ms
 and the delivered baseline took 3.542 ms. Each median came from a separate
-ten-call run. The workflow's recorded winner remains the baseline.
+ten-call run. The November 25 workflow delivered the baseline.
+
+On November 26 the updated workflow replayed that budget stop on NPU 3.
+Both snapshots passed all five fixtures. The pending candidate won all ten
+alternating pairs with a median paired gain of 7.97% (median synchronized
+calls of 3.744 ms and 3.491 ms), so the report recommended it for deployment.
+The vendor search record still identifies its original winner.
+
+The paired KDA check also replayed the earlier simulator reduction from
+4,497,456 to 918,106 cycles. On NPU 6 the finalist won all ten timing pairs
+with a 23.08% median paired gain (4.364 ms and 3.343 ms).
 
 ## Setup
 
@@ -277,13 +301,19 @@ The KDA fixture driver selects the mode per phase as shown in the table above.
 - **`sim`** is the Soc CAModel on CPU. No device needed, but its cycle counts are
   a **cost model, not a measurement**.
 
-`PYPTO_RUN_MODE=sim ./run.sh perf` reads per-pipe counters from the simulator.
+`./run.sh perf` always reads per-pipe counters from the simulator.
 Use `./run.sh profile` for measured device timings. It enables
 `runtime_debug_mode=1` and analyzes the device swimlane and per-core activity.
 
 Concurrent slots get one device each via `TILE_FWK_DEVICE_ID`
 (`PYPTO_DEVICES`, default `0,1,2,3,4,5,6,7`). Without that, pooled runs would
 serialise on device 0 and the measured speed-up would be an artefact.
+
+Standalone validation, simulation and IR jobs write to `runs/<kernel>_<mode-or-phase>/run-*/`.
+The sibling `latest` symlink points to the most recently started invocation.
+Standalone repair and optimization evaluate kernel edits with the initial
+script’s inputs, reference and assertions. Their generated proposals and
+checked sources are kept separately.
 
 ## Phase 1 — validate
 
@@ -306,7 +336,7 @@ $ ./run.sh validate fixtures/02_row_softmax_broken.py
 
 `./run.sh pool` runs the kernels at the same time. One actor never runs
 concurrently with *itself*, so real parallelism needs one worker chain per slot —
-`PYPTO_POOL` sets how many (default 4). Use five slots for the five default kernels.
+`PYPTO_POOL` sets how many (default 4). Workers take kernels in round-robin order, so one run can cover more kernels than slots. NPU concurrency is capped by the configured device count.
 
 ```console
 $ ./run.sh pool examples/0{1,2,3}_*.py
@@ -326,8 +356,8 @@ before and after each one. Phase 2 pairs those up and diffs them.
 $ ./run.sh ir examples/03_fused_linear.py
 PASS  03_fused_linear: 32/122 passes changed the graph;
       level shifts: TENSOR_GRAPH->TILE_GRAPH@ExpandFunction
-      report: runs/03_fused_linear_ir/ir_report.md
-      diffs:  runs/03_fused_linear_ir/ir_diffs
+      report: runs/03_fused_linear_ir/latest/ir_report.md
+      diffs:  runs/03_fused_linear_ir/latest/ir_diffs
 ```
 
 `ir_report.md` gives the level transitions, the level each function reaches, and
@@ -431,7 +461,7 @@ Four behaviours worth knowing; the first two cost real debugging time.
   strand tokens with no diagnostic. Joining N sources needs N ports and one
   action each — hence the `make_join(pool)` factory, and `Feed` in phase 4.
 - **An output port emits one token per firing.** A runtime-sized work list can
-  only reach a statically-sized pool through one port per slot, so
+  reach a statically-sized pool as one batch per slot, so
   `make_dispatch(pool)` builds its class at import time.
 
 Also: `RunSim` is a `@task`, not a `@tool`. A `@tool` raises on non-zero exit,

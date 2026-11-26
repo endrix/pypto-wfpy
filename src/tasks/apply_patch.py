@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from tempfile import mkdtemp
 
 from src.lib.agent_io import read_json
 from src.lib.runner import REPO_ROOT
@@ -26,7 +27,7 @@ class ApplyPatch:
         self._n += 1
         out_dir = REPO_ROOT / "runs" / "repaired"
         out_dir.mkdir(parents=True, exist_ok=True)
-        target = out_dir / f"attempt{self._n}.py"
+        target = Path(mkdtemp(dir=out_dir)) / f"attempt{self._n}.py"
         # The agent's port is .json, so the reply is an object with the source
         # in a field. read_json raises on a malformed one rather than writing a
         # half-empty file: an empty kernel reads downstream as "it ran and

@@ -94,7 +94,7 @@ def main() -> int:
     lines = result["Out"] or ["(no output)"]
     for line in lines:
         print(line)
-    return 1 if any(ln.startswith("NO DATA") for ln in lines) else 0
+    return 0 if all(ln.startswith("PROFILED  ") and ln.endswith(": passed") for ln in lines) else 1
 
 
 if __name__ == "__main__":

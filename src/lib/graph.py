@@ -184,21 +184,20 @@ def stage_dumps(run_dir: str | Path) -> dict[str, str]:
     return {level: str(path) for level, (_, path) in best.items()}
 
 
-def latest_graph_run(runs_root: str | Path) -> str:
-    """The work dir of the most recent run under ``runs_root`` that dumped a graph.
-
-    The repair loop gives each attempt its own work dir, and a GAVE UP run ends
-    on an attempt that compiled nothing -- so that final dir has no dumps. This
-    finds the newest attempt that DID produce a ``computation_graph`` (the last
-    kernel that actually lowered), so the stage viewers show a real graph rather
-    than falling back to the markdown report. Returns "" if none exist.
-    """
-    graphs = sorted(
-        Path(runs_root).glob("*/output/*/computation_graph"),
-        key=lambda p: p.stat().st_mtime,
-    )
-    # computation_graph -> output/<ts> -> output -> runs/<name> (the work dir).
-    return str(graphs[-1].parents[2]) if graphs else ""
+def viewer_dumps(run_dir: str | Path) -> dict[str, str]:
+    """Publish each level from this invocation, with an empty graph for missing dumps."""
+    dumps = stage_dumps(run_dir)
+    ports = ("TensorGraph", "TileGraph", "BlockGraph", "ExecuteGraph")
+    results = {}
+    for level, port in zip(ALL_LEVELS, ports):
+        if level in dumps:
+            results[port] = dumps[level]
+        else:
+            missing = Path(run_dir) / f"missing_{level}.json"
+            missing.write_text(json.dumps({"nodes": [], "edges": [],
+                                           "note": f"No {level} dump from this invocation."}))
+            results[port] = str(missing)
+    return results
 
 
 def level_of(path: Path) -> str:

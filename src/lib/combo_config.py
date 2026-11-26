@@ -30,6 +30,14 @@ IS_ACP = TRANSPORT == "acp"
 MODEL = os.environ.get("PYPTO_COMBO_MODEL", "gpt-6.2-sol")
 TIMEOUT_MS = int(os.environ.get("PYPTO_COMBO_TIMEOUT_MS", "1800000"))
 
+
+def kda_verification() -> bool:
+    mode = os.environ.get("PYPTO_COMBO_VERIFICATION", "kda")
+    if mode not in ("kda", "generic"):
+        raise ValueError("PYPTO_COMBO_VERIFICATION must be kda or generic")
+    return mode == "kda"
+
+
 REDESIGN_PROMPT = """Write the next authoring brief for the operator, original
 PyTorch source, workspace and expected implementation named in the evidence.
 Repeat those four identifiers in the brief. Read the current design and search

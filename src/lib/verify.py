@@ -38,6 +38,7 @@ Two constraints found by measurement:
 from __future__ import annotations
 
 import csv
+import math
 from pathlib import Path
 from typing import Any
 
@@ -127,17 +128,18 @@ def read_dumps(verify_dir: str | Path) -> dict[str, OpDump]:
 
 
 def _values(dump: OpDump) -> Any:
-    """The dump's bytes as a float32 array, or None if it cannot be read."""
+    """The dump's bytes as a native-dtype array, or None if it cannot be read."""
     import numpy as np  # local: see the note on DTYPES above
 
     name = DTYPES.get(dump.dtype)
     path = Path(dump.path)
     if name is None or not path.is_file():
         return None
-    raw = np.frombuffer(path.read_bytes(), dtype=getattr(np, name))
-    # float32 throughout: subtracting two fp16 arrays overflows to inf where the
-    # values are large, which would read as a divergence.
-    return raw.astype(np.float32)
+    try:
+        return np.frombuffer(path.read_bytes(), dtype=getattr(np, name))
+    except (ValueError, OSError):
+        return None
+
 
 
 def _order(magic: str) -> int:
@@ -160,25 +162,30 @@ def compare(reference: dict[str, OpDump], suspect: dict[str, OpDump]) -> list[Op
             dump = ref or sus
             assert dump is not None
             diffs.append(OpDiff(magic=magic, opcode=dump.opcode, shape=dump.shape,
-                                max_abs=0.0, comparable=False, note=present))
+                                max_abs=0.0, comparable=False, note=present, structural=True))
             continue
 
         import numpy as np  # local: see the note on DTYPES above
 
+        if (ref.opcode, ref.shape, ref.dtype) != (sus.opcode, sus.shape, sus.dtype):
+            note = f"structural difference: {ref.opcode} {ref.shape} {ref.dtype} vs {sus.opcode} {sus.shape} {sus.dtype}"
+            diffs.append(OpDiff(magic, ref.opcode, ref.shape, 0.0, False, note, structural=True))
+            continue
         a, b = _values(ref), _values(sus)
         if a is None or b is None:
             diffs.append(OpDiff(magic=magic, opcode=ref.opcode, shape=ref.shape,
                                 max_abs=0.0, comparable=False,
                                 note=f"unreadable ({ref.dtype})"))
             continue
-        if a.shape != b.shape:
+        if a.shape != b.shape or not a.size:
             diffs.append(OpDiff(magic=magic, opcode=ref.opcode, shape=ref.shape,
                                 max_abs=0.0, comparable=False,
                                 note=f"different sizes {a.size} vs {b.size}"))
             continue
 
         diffs.append(OpDiff(magic=magic, opcode=ref.opcode, shape=ref.shape,
-                            max_abs=float(np.abs(a - b).max()), comparable=True))
+                            max_abs=(float(np.abs(a.astype(np.float64) - b.astype(np.float64)).max())
+                                     if np.isfinite(a).all() and np.isfinite(b).all() else math.inf), comparable=True))
     return diffs
 
 
@@ -188,4 +195,9 @@ def first_divergence(diffs: list[OpDiff], atol: float = AGREE_ATOL) -> OpDiff | 
     Earliest, not largest: the difference grows as it propagates, so the biggest
     number is usually the final output and says nothing about the cause.
     """
-    return next((d for d in diffs if d.comparable and d.max_abs > atol), None)
+    for diff in diffs:
+        if diff.structural or (diff.comparable and diff.max_abs > atol):
+            return diff
+        if not diff.comparable:
+            return None
+    return None

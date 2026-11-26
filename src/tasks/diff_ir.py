@@ -24,7 +24,7 @@ class DiffIR:
         ir_run, diffs = payload
         job = ir_run.job
 
-        if ir_run.rc != 0:
+        if ir_run.rc != 0 or ir_run.error:
             return f"FAIL  {job.name}: rc={ir_run.rc}  {ir_run.error[:80]}"
         if not diffs:
             return f"FAIL  {job.name}: ran clean but produced no IR dumps (is debug dumping on?)"

@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from src.agents import english_output
-from src.lib.repair_config import CONNECTOR, IS_ACP, PROMPT, REPAIR_SKILL, TIMEOUT_MS, TRANSPORT
+from src.lib.repair_config import CONNECTOR, IS_ACP, MODEL, PROMPT, REPAIR_SKILL, TIMEOUT_MS, TRANSPORT
 from wfpy import File, Port, agent
 
 
@@ -19,6 +19,7 @@ from wfpy import File, Port, agent
     prompt=english_output(PROMPT),
     transport=TRANSPORT,
     connector=CONNECTOR if IS_ACP else "",
+    model=MODEL,
     timeout_ms=TIMEOUT_MS,
     skill=REPAIR_SKILL,
 )

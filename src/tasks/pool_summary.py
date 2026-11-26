@@ -40,7 +40,8 @@ class PoolSummary:
             else:
                 lines.append(f"  FAIL  {r.job.name:<22} rc={r.rc}  {r.error[:60]}")
         passed = sum(1 for r in best if r.passed)
-        wall = max((r.seconds for r in best), default=0.0)
+        wall = max((sum(r.seconds for r in best if r.job.slot == slot)
+                    for slot in {r.job.slot for r in best}), default=0.0)
         serial = round(sum(r.seconds for r in best), 1)
         head = (f"{passed}/{len(best)} kernels passed  "
                 f"(slowest slot {wall}s vs {serial}s if run serially)")

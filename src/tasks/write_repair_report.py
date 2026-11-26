@@ -9,16 +9,7 @@ from pathlib import Path
 from src.lib import graph
 from src.lib.records import Outcome
 from src.lib.repair_config import BUDGET
-from src.lib.runner import REPO_ROOT
 from wfpy import File, Port, action, task
-
-# IR level -> the output port that carries that stage's graph dump.
-_STAGE_PORTS = {
-    "TENSOR_GRAPH": "TensorGraph",
-    "TILE_GRAPH": "TileGraph",
-    "BLOCK_GRAPH": "BlockGraph",
-    "EXECUTE_GRAPH": "ExecuteGraph",
-}
 
 
 @task
@@ -92,7 +83,7 @@ class WriteRepairReport:
         if g.dump_root:
             lines += ["", f"IR dumps: `{g.dump_root}`"]
 
-        out_dir = REPO_ROOT / "runs" / "repair_reports"
+        out_dir = Path(result.job.work_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
         path = out_dir / f"{result.job.name}.md"
         path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -103,26 +94,7 @@ class WriteRepairReport:
             f"leaves={g.block_leaves}\n"
             f"      report: {path}"
         )
-        return {"Report": str(path), "Out": summary, **self._stages(result.job.work_dir, path)}
-
-    def _stages(self, work_dir: str, report: Path) -> dict:
-        """Map each stage output port to a dump file to open.
-
-        Every port must carry a token -- the ports are unconditional outputs.
-        The final attempt is preferred, but a GAVE UP run ends on a kernel that
-        compiled nothing, so when its dir has no dumps we fall back to the most
-        recent attempt that DID lower (a real graph, not markdown). A level that
-        specific run still never reached falls back to the newest level it did
-        reach, and only a repo with no graphs anywhere falls back to the report.
-        """
-        dumps = graph.stage_dumps(work_dir)
-        if not dumps:
-            dumps = graph.stage_dumps(graph.latest_graph_run(REPO_ROOT / "runs"))
-        newest = next(
-            (dumps[lv] for lv in reversed(list(_STAGE_PORTS)) if lv in dumps),
-            str(report),
-        )
-        return {port: dumps.get(lv, newest) for lv, port in _STAGE_PORTS.items()}
+        return {"Report": str(path), "Out": summary, **graph.viewer_dumps(result.job.work_dir)}
 
     _PRODUCES = {"Report": 1, "Out": 1, "TensorGraph": 1, "TileGraph": 1,
                  "BlockGraph": 1, "ExecuteGraph": 1}

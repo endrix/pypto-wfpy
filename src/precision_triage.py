@@ -86,7 +86,7 @@ SUSPECT = _abs(_requested("PYPTO_SUSPECT", 1, DEFAULT_SUSPECT))
 REFERENCE = _abs(_requested("PYPTO_REFERENCE", 2, DEFAULT_REFERENCE))
 
 
-@workflow(inputs={}, outputs={"Out": File(ext=".md")})
+@workflow(inputs={}, outputs={"Out": File(ext=".md"), "Verdict": str})
 def precision_triage() -> None:
     """Four nodes: the two kernels, the triage, and somewhere to read it."""
     suspect = KernelSource(path=File(SUSPECT))
@@ -104,6 +104,7 @@ def precision_triage() -> None:
     connect(triage.Report, table.In)
     connect(triage.Analysis, analysis.In)
     connect(triage.Analysis, "Out")
+    connect(triage.Verdict, "Verdict")
 
 
 def main() -> int:
@@ -134,7 +135,8 @@ def main() -> int:
     # format, so wfpy wrote the reply to a file and passed that on.
     for token in result["Out"] or []:
         print(agent_io.read_text(token))
-    return 0 if result["Out"] else 1
+    verdicts = result["Verdict"] or []
+    return 0 if verdicts and all(v.startswith(("CULPRIT", "NO DIVERGENCE")) for v in verdicts) else 1
 
 
 if __name__ == "__main__":

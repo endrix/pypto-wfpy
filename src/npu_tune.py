@@ -33,7 +33,7 @@ def main():
                  **agent_run_options())
     for path in result["Out"]:
         print(Path(str(path)).read_text())
-    return 0 if result["Status"] == ["PASS"] else 1
+    return 0 if result["Status"] in (["PASS"], ["BASELINE VERIFIED"]) else 1
 
 
 if __name__ == "__main__":

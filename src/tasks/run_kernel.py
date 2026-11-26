@@ -5,10 +5,12 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
+from src.lib.frozen_fixture import bind_fixture
 
 from src.lib import graph
 from src.lib.records import Outcome
-from src.lib.runner import execute_job, make_job
+from src.lib.runner import REPO_ROOT, execute_job, make_job
 from wfpy import Port, action, task
 
 
@@ -25,6 +27,7 @@ class RunKernel:
 
     timeout_s: int = 900
     _n: int = 0
+    _fixture: str = ""
 
     class Ports:
         Initial = Port[str](direction="in")
@@ -55,8 +58,10 @@ class RunKernel:
 
     @action(consumes={"Initial": 1}, produces={"Result": 1})
     def from_initial(self, kernel: str) -> Outcome:
+        path = REPO_ROOT / str(kernel)
+        self._fixture = path.read_text() if path.is_file() else ""
         return self._run(kernel)
 
     @action(consumes={"Retry": 1}, produces={"Result": 1})
     def from_retry(self, kernel: str) -> Outcome:
-        return self._run(kernel)
+        return self._run(bind_fixture(self._fixture, str(kernel)))

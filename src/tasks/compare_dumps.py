@@ -46,19 +46,24 @@ class CompareDumps:
             return Divergence(reference=names[0], suspect=names[1], diffs=(),
                               culprit=None, error="; ".join(missing))
 
-        if reference.passed and not suspect.passed:
-            pass  # the expected shape: a good reference and a failing suspect
-        elif not reference.passed:
-            print("[triage] warning: the reference failed its own check too, so "
-                  "'first divergence' means 'first difference', not 'first fault'",
-                  file=sys.stderr)
-
         diffs = verify.compare(reference.dumps, suspect.dumps)
         culprit = verify.first_divergence(diffs)
+        error = ""
+        if not reference.passed:
+            error = f"reference failed its own check: {reference.error}"
+        else:
+            for row in diffs:
+                if row is culprit:
+                    break
+                if not row.comparable:
+                    error = f"unreadable checkpoint at op {row.magic}: {row.note}"
+                    break
+            if not error and not culprit and not suspect.passed:
+                error = "suspect failed its own check but the captured checkpoints agree"
         where = f"op {culprit.magic} {culprit.opcode}" if culprit else "nowhere"
         print(
             f"[triage] {len(diffs)} ops aligned; first divergence at {where}",
             file=sys.stderr,
         )
         return Divergence(reference=names[0], suspect=names[1],
-                          diffs=tuple(diffs), culprit=culprit)
+                          diffs=tuple(diffs), culprit=culprit, error=error)

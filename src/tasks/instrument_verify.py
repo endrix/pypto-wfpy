@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from tempfile import mkdtemp
 
 from src.lib import verify
 from src.lib.runner import REPO_ROOT
@@ -33,7 +34,7 @@ class InstrumentVerify:
         source_path = Path(str(kernel))
         out_dir = REPO_ROOT / "runs" / "triage" / self.label
         out_dir.mkdir(parents=True, exist_ok=True)
-        target = out_dir / source_path.name
+        target = Path(mkdtemp(prefix='run-', dir=out_dir)) / source_path.name
         target.write_text(
             verify.instrument(source_path.read_text(encoding="utf-8")), encoding="utf-8"
         )

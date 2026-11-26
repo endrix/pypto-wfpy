@@ -37,6 +37,7 @@ Run:
 import os
 from pathlib import Path
 import sys
+from uuid import uuid4
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -98,7 +99,7 @@ def new_kernel() -> None:
     file input as a real file for the agent rather than inlining it.
     """
     source = KernelSource(path=File(TORCH_SOURCE))
-    author = author_flow(OP, WORKSPACE, TORCH_SOURCE)()
+    author = author_flow(OP, str(Path(WORKSPACE) / uuid4().hex), TORCH_SOURCE)()
     view = MarkdownViewer()
 
     connect(source.Out, author.Source)

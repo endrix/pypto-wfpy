@@ -41,7 +41,7 @@ problem and they would dominate the run.
 
 Run:
     ./run.sh kda                                       # the KDA decay matrix
-    ./run.sh kda torch_src/rms_norm.py rms_norm        # something smaller
+    PYPTO_COMBO_VERIFICATION=generic ./run.sh kda torch_src/rms_norm.py rms_norm
     PYPTO_COMBO_REDESIGNS=0 ./run.sh kda               # author and optimise once
 """
 
@@ -60,6 +60,7 @@ from src.lib.combo_config import (  # noqa: E402
     MODEL,
     OUTER_BUDGET,
     TRANSPORT,
+    kda_verification,
 )
 from src.lib.optimize_config import BUDGET, MIN_GAIN_PCT  # noqa: E402
 from src.lib.run_options import agent_run_options, summary as kept_summary  # noqa: E402
@@ -162,7 +163,7 @@ def main() -> int:
         out_dir=str(WF_OUT),
         **agent_run_options(),
     )
-    require_npu = Path(TORCH_SOURCE).resolve() == REPO_ROOT / DEFAULT_SOURCE
+    require_npu = kda_verification()
     return report_status(result["Out"] or [], require_npu=require_npu)
 
 

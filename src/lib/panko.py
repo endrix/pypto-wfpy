@@ -216,15 +216,40 @@ def without_profiling(source: bytes) -> bytes:
     return b"".join(lines)
 
 
-def verify_winner(root: Path, state: dict) -> str:
+def pending_refinement(root: Path, progress: dict) -> Path | None:
+    """Locate the scored snapshot still held by the vendor's refinement loop at STOP."""
+    best = (progress.get("refine") or {}).get("best") or {}
+    digest = best.get("code_hash")
+    if not digest or progress["stop_reason"] != "eval_budget":
+        return None
+    if digest == sha256(kernel(root).read_bytes()).hexdigest():
+        return None
+    tree = json.loads((root / "optimization/search_state.json").read_text())
+    cached = tree.get("eval_cache", {}).get(digest, {})
+    if cached.get("s") != 1 or cached.get("p", 0) <= 0 or cached.get("p") != best.get("p"):
+        raise ValueError("Pending refinement has no matching successful evaluation")
+    if len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
+        raise ValueError("Invalid pending refinement hash")
+    snapshot = root / "optimization/nodes" / f"{digest}.py"
+    if sha256(snapshot.read_bytes()).hexdigest() != digest:
+        raise ValueError("Pending refinement snapshot differs from its scored source")
+    return snapshot
+
+
+class FinalCheckFailed(ValueError):
+    """The final device driver rejected the delivered or pending kernel."""
+
+
+def verify_winner(root: Path, state: dict, candidate: Path | None = None) -> str:
     directory = mkdtemp(prefix="final-", dir=root)
     path = Path(directory) / "winner.py"
-    write(path, without_profiling(kernel(root).read_bytes()))
+    write(path, without_profiling((candidate or kernel(root)).read_bytes()))
     job = JobSpec(str(path), OP, True, "npu", directory,
                   (PYTHON, str(DRIVER), "final", str(path), str(root / f"{OP}_golden.py")),
                   device_id=state["manifest"]["device"], phase="final")
     run = execute_job(job, int(os.environ.get("PYPTO_KDA_FINAL_TIMEOUT_S", 1800)))
     if not run.passed:
-        raise ValueError(f"Delivered kernel failed the final NPU check: {run.error}. Logs: {directory}")
-    write(root / "winner.py", path.read_bytes())
+        raise FinalCheckFailed(f"Kernel failed the final NPU check: {run.error}. Logs: {directory}")
+    if candidate is None:
+        write(root / "winner.py", path.read_bytes())
     return directory

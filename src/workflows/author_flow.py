@@ -106,7 +106,7 @@ def author_flow(op: str, workspace: str, torch_source: str, *, verify_kda: bool 
                     "reported failure, preserving the original operator contract and golden."
                 )
             author = stage_author(stage, prompt, skill, ext, **agent_options)()
-            gate = stage_gate(stage, artifact, _NEXT, invalidate_rejected=verify_kda)(workspace=workspace, op=op)
+            gate = stage_gate(stage, artifact, _NEXT)(workspace=workspace, op=op)
 
             connect(brief, author.Brief)
             connect(author.Artifact, gate.Artifact)
